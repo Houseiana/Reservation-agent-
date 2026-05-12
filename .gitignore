@@ -1,0 +1,18 @@
+# local Node toolchain installed by Claude (~188 MB)
+.tools/
+
+# Claude memory + session
+.claude/
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Common
+*.log
+node_modules/
+.next/
+out/
+.env*.local
