@@ -202,9 +202,22 @@ interface Dict {
     exportCsv: string;
     newBooking: string;
     pillsAll: string;
-    headers: { ref: string; guest: string; property: string; dates: string; total: string; status: string };
+    headers: { ref: string; guest: string; property: string; dates: string; total: string; status: string; actions: string };
     statuses: Record<"confirmed" | "pending" | "checkedin" | "checkedout" | "cancelled", string>;
     nightsLbl: (n: number) => string;
+    stats: { todayIn: string; inHouse: string; todayOut: string; paymentPending: string; upcomingWeek: string };
+    urgency: {
+      today: string; tomorrow: string; inDays: (n: number) => string;
+      inHouse: string; checkoutToday: string; lateCheckout: string;
+    };
+    tier: { vip: string; repeat: string; new: string };
+    paymentLabel: { paid: string; partial: string; pending: string };
+    paymentPartial: (pct: number) => string;
+    channels: { wa: string; call: string; web: string; direct: string };
+    actions: { call: string; whatsapp: string; viewNotes: string; more: string };
+    filters: { all: string; today: string; tomorrow: string; inHouse: string; pendingPay: string; upcoming: string };
+    guestsCount: (n: number) => string;
+    noBookings: string;
   };
   guestsPage: {
     title: string;
@@ -450,10 +463,36 @@ export const DICT: Record<Lang, Dict> = {
       title: "All Bookings",
       subtitle: "Manage reservations across all properties.",
       exportCsv: "Export CSV", newBooking: "+ New Booking",
-      pillsAll: "All · 142",
-      headers: { ref: "Ref", guest: "Guest", property: "Property", dates: "Dates", total: "Total", status: "Status" },
+      pillsAll: "All",
+      headers: { ref: "Ref", guest: "Guest", property: "Property · Stay", dates: "Dates", total: "Total · Payment", status: "Status", actions: "Actions" },
       statuses: { confirmed: "Confirmed", pending: "Pending", checkedin: "Checked-in", checkedout: "Checked-out", cancelled: "Cancelled" },
-      nightsLbl: (n) => `${n} nights`,
+      nightsLbl: (n) => `${n} ${n === 1 ? "night" : "nights"}`,
+      stats: {
+        todayIn: "Check-ins today",
+        inHouse: "Guests in-house",
+        todayOut: "Check-outs today",
+        paymentPending: "Payment pending",
+        upcomingWeek: "Next 7 days",
+      },
+      urgency: {
+        today: "Today",
+        tomorrow: "Tomorrow",
+        inDays: (n) => `In ${n} days`,
+        inHouse: "In-house",
+        checkoutToday: "Out today",
+        lateCheckout: "Late check-out",
+      },
+      tier: { vip: "VIP", repeat: "Repeat", new: "New" },
+      paymentLabel: { paid: "Paid", partial: "Partial", pending: "Unpaid" },
+      paymentPartial: (pct) => `Partial · ${pct}%`,
+      channels: { wa: "WhatsApp", call: "Call", web: "Website", direct: "Direct" },
+      actions: { call: "Call guest", whatsapp: "WhatsApp guest", viewNotes: "View notes", more: "More" },
+      filters: {
+        all: "All", today: "Today", tomorrow: "Tomorrow",
+        inHouse: "In-house", pendingPay: "Unpaid", upcoming: "Upcoming",
+      },
+      guestsCount: (n) => `${n} ${n === 1 ? "guest" : "guests"}`,
+      noBookings: "No bookings match this filter.",
     },
     guestsPage: {
       title: "Guests", subtitle: "Customer database & booking history.",
@@ -669,10 +708,36 @@ export const DICT: Record<Lang, Dict> = {
       title: "كل الحجوزات",
       subtitle: "إدارة الحجوزات عبر كل العقارات.",
       exportCsv: "تصدير CSV", newBooking: "+ حجز جديد",
-      pillsAll: "الكل · 142",
-      headers: { ref: "المرجع", guest: "العميل", property: "العقار", dates: "التواريخ", total: "الإجمالي", status: "الحالة" },
+      pillsAll: "الكل",
+      headers: { ref: "المرجع", guest: "العميل", property: "العقار · الإقامة", dates: "التواريخ", total: "الإجمالي · الدفع", status: "الحالة", actions: "إجراءات" },
       statuses: { confirmed: "مؤكد", pending: "معلّق", checkedin: "تم الوصول", checkedout: "تم المغادرة", cancelled: "ملغى" },
-      nightsLbl: (n) => `${n} ليالٍ`,
+      nightsLbl: (n) => `${n} ${n === 1 ? "ليلة" : "ليالٍ"}`,
+      stats: {
+        todayIn: "وصول اليوم",
+        inHouse: "ضيوف بالداخل",
+        todayOut: "مغادرة اليوم",
+        paymentPending: "دفع معلّق",
+        upcomingWeek: "خلال 7 أيام",
+      },
+      urgency: {
+        today: "اليوم",
+        tomorrow: "بكرة",
+        inDays: (n) => `خلال ${n} أيام`,
+        inHouse: "داخل الوحدة",
+        checkoutToday: "خروج اليوم",
+        lateCheckout: "تأخر المغادرة",
+      },
+      tier: { vip: "VIP", repeat: "متكرر", new: "جديد" },
+      paymentLabel: { paid: "مدفوع", partial: "جزئي", pending: "غير مدفوع" },
+      paymentPartial: (pct) => `جزئي · ${pct}%`,
+      channels: { wa: "واتساب", call: "اتصال", web: "موقع", direct: "مباشر" },
+      actions: { call: "اتصل بالعميل", whatsapp: "واتساب العميل", viewNotes: "عرض الملاحظات", more: "المزيد" },
+      filters: {
+        all: "الكل", today: "اليوم", tomorrow: "بكرة",
+        inHouse: "بالداخل", pendingPay: "غير مدفوع", upcoming: "قادمة",
+      },
+      guestsCount: (n) => `${n} ضيف`,
+      noBookings: "لا توجد حجوزات مطابقة لهذا الفلتر.",
     },
     guestsPage: {
       title: "العملاء", subtitle: "قاعدة بيانات العملاء وسجل الحجوزات.",

@@ -14,8 +14,10 @@ import {
   MONTHLY_CHART_DATA,
   GUEST_TAGS,
   SITE_URL,
+  TODAY_STR,
   type Property,
   type Guest,
+  type Booking,
 } from "@/data";
 import { DICT, type Lang } from "@/i18n";
 import { Icon } from "@/components/Icons";
@@ -1765,7 +1767,87 @@ function BookingFlow({
 /* ============================================================
    BOOKINGS PAGE
 ============================================================ */
+type BookingFilter = "all" | "today" | "tomorrow" | "inHouse" | "pendingPay" | "upcoming" | "confirmed" | "pending" | "checkedin" | "cancelled";
+
+function daysBetween(a: string, b: string) {
+  return Math.round((new Date(b).getTime() - new Date(a).getTime()) / 86400000);
+}
+
+function urgencyOf(b: Booking, today: string): { key: keyof typeof DICT["en"]["bookingsPage"]["urgency"] | "upcoming" | "past" | null; days: number } {
+  if (b.status === "cancelled" || b.status === "checkedout") return { key: null, days: 0 };
+  const dIn = daysBetween(today, b.checkin);
+  const dOut = daysBetween(today, b.checkout);
+  if (b.status === "checkedin") {
+    if (dOut < 0) return { key: "lateCheckout", days: dOut };
+    if (dOut === 0) return { key: "checkoutToday", days: 0 };
+    return { key: "inHouse", days: dOut };
+  }
+  if (dIn === 0) return { key: "today", days: 0 };
+  if (dIn === 1) return { key: "tomorrow", days: 1 };
+  if (dIn > 1 && dIn <= 7) return { key: "inDays", days: dIn };
+  return { key: null, days: dIn };
+}
+
+function tierOf(g: Guest): "vip" | "repeat" | "new" {
+  if (g.bookings >= 5) return "vip";
+  if (g.bookings >= 2) return "repeat";
+  return "new";
+}
+
+const CHANNEL_ICON = {
+  wa: (
+    <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor">
+      <path d="M17.5 14.4c-.3-.2-1.7-.9-2-1-.3-.1-.5-.2-.7.1-.2.3-.8 1-.9 1.2-.2.2-.3.2-.6.1-.3-.2-1.2-.5-2.4-1.5-.9-.8-1.5-1.8-1.7-2.1-.2-.3 0-.5.1-.6.1-.1.3-.3.4-.5.1-.2.2-.3.3-.5.1-.2 0-.4 0-.5-.1-.2-.7-1.6-.9-2.2-.2-.6-.5-.5-.7-.5h-.6c-.2 0-.5.1-.8.4-.3.3-1 1-1 2.5s1.1 2.9 1.2 3.1c.1.2 2.1 3.2 5.1 4.5.7.3 1.3.5 1.7.6.7.2 1.4.2 1.9.1.6-.1 1.7-.7 2-1.4.2-.7.2-1.2.2-1.4-.1-.1-.3-.2-.6-.3z" />
+    </svg>
+  ),
+  call: <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" /></svg>,
+  web: <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="9" /><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18" /></svg>,
+  direct: <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 21h18M5 21V8l7-5 7 5v13M9 21V12h6v9" /></svg>,
+};
+
 function BookingsPage({ goToSearch, t, lang }: { goToSearch: () => void; t: typeof DICT["en"]; lang: Lang }) {
+  const [filter, setFilter] = useState<BookingFilter>("all");
+  const [notePopover, setNotePopover] = useState<string | null>(null);
+  const today = TODAY_STR;
+
+  // Pre-compute urgency for each booking
+  const annotated = useMemo(
+    () => BOOKINGS.map((b) => ({ b, urgency: urgencyOf(b, today), tier: tierOf(b.guest) })),
+    [today]
+  );
+
+  const counts = useMemo(() => {
+    let todayIn = 0, inHouse = 0, todayOut = 0, paymentPending = 0, upcoming = 0;
+    let totalPendingAmount = 0, totalInHouseRevenue = 0;
+    for (const { b, urgency } of annotated) {
+      if (b.status === "cancelled") continue;
+      if (urgency.key === "today") todayIn++;
+      if (urgency.key === "inHouse" || urgency.key === "checkoutToday" || urgency.key === "lateCheckout") {
+        inHouse++;
+        if (urgency.key === "inHouse" || urgency.key === "lateCheckout") totalInHouseRevenue += b.totalAmount;
+      }
+      if (urgency.key === "checkoutToday" || urgency.key === "lateCheckout") todayOut++;
+      if (b.paymentStatus !== "paid" && b.status !== "checkedout") {
+        paymentPending++;
+        totalPendingAmount += (b.totalAmount - b.paidAmount);
+      }
+      if (urgency.key === "today" || urgency.key === "tomorrow" || urgency.key === "inDays") upcoming++;
+    }
+    return { todayIn, inHouse, todayOut, paymentPending, upcoming, totalPendingAmount, totalInHouseRevenue };
+  }, [annotated]);
+
+  const filtered = useMemo(() => {
+    return annotated.filter(({ b, urgency }) => {
+      if (filter === "all") return true;
+      if (filter === "today") return urgency.key === "today" || urgency.key === "checkoutToday";
+      if (filter === "tomorrow") return urgency.key === "tomorrow";
+      if (filter === "inHouse") return b.status === "checkedin";
+      if (filter === "pendingPay") return b.paymentStatus !== "paid" && b.status !== "checkedout" && b.status !== "cancelled";
+      if (filter === "upcoming") return ["today", "tomorrow", "inDays"].includes(urgency.key as string);
+      return b.status === filter;
+    });
+  }, [annotated, filter]);
+
   const statusColor: Record<string, string> = {
     confirmed: "var(--green)", pending: "var(--orange)", checkedin: "var(--blue)",
     checkedout: "var(--muted)", cancelled: "var(--red)",
@@ -1774,7 +1856,57 @@ function BookingsPage({ goToSearch, t, lang }: { goToSearch: () => void; t: type
     confirmed: "var(--green-soft)", pending: "var(--orange-soft)", checkedin: "var(--blue-soft)",
     checkedout: "#EEF1F4", cancelled: "var(--red-soft)",
   };
-  const headers = [t.bookingsPage.headers.ref, t.bookingsPage.headers.guest, t.bookingsPage.headers.property, t.bookingsPage.headers.dates, t.bookingsPage.headers.total, t.bookingsPage.headers.status];
+
+  const stats = [
+    { key: "today" as const, icon: <Icon.Calendar size={16} />, bg: "var(--red-soft)", color: "var(--red)",
+      lbl: t.bookingsPage.stats.todayIn, val: counts.todayIn, sub: counts.todayIn > 0 ? `${counts.todayIn} arriving` : "—" },
+    { key: "inHouse" as const, icon: <Icon.Users size={16} />, bg: "var(--blue-soft)", color: "var(--blue)",
+      lbl: t.bookingsPage.stats.inHouse, val: counts.inHouse, sub: counts.totalInHouseRevenue > 0 ? `EGP ${counts.totalInHouseRevenue.toLocaleString()}` : "—" },
+    { key: "today" as const, icon: <Icon.Calendar size={16} />, bg: "#FFE4B5", color: "#7A4700",
+      lbl: t.bookingsPage.stats.todayOut, val: counts.todayOut, sub: "—" },
+    { key: "pendingPay" as const, icon: <Icon.Bolt size={16} />, bg: "var(--orange-soft)", color: "var(--orange)",
+      lbl: t.bookingsPage.stats.paymentPending, val: counts.paymentPending, sub: counts.totalPendingAmount > 0 ? `EGP ${counts.totalPendingAmount.toLocaleString()}` : "—" },
+    { key: "upcoming" as const, icon: <Icon.Calendar size={16} />, bg: "var(--green-soft)", color: "var(--green)",
+      lbl: t.bookingsPage.stats.upcomingWeek, val: counts.upcoming, sub: "—" },
+  ];
+
+  const pills: { k: BookingFilter; lbl: string; count?: number }[] = [
+    { k: "all", lbl: t.bookingsPage.filters.all, count: BOOKINGS.length },
+    { k: "today", lbl: t.bookingsPage.filters.today, count: counts.todayIn + counts.todayOut },
+    { k: "tomorrow", lbl: t.bookingsPage.filters.tomorrow },
+    { k: "inHouse", lbl: t.bookingsPage.filters.inHouse, count: counts.inHouse },
+    { k: "pendingPay", lbl: t.bookingsPage.filters.pendingPay, count: counts.paymentPending },
+    { k: "upcoming", lbl: t.bookingsPage.filters.upcoming, count: counts.upcoming },
+    { k: "confirmed", lbl: t.bookingsPage.statuses.confirmed },
+    { k: "pending", lbl: t.bookingsPage.statuses.pending },
+    { k: "checkedin", lbl: t.bookingsPage.statuses.checkedin },
+    { k: "cancelled", lbl: t.bookingsPage.statuses.cancelled },
+  ];
+
+  function urgencyBadge(u: { key: ReturnType<typeof urgencyOf>["key"]; days: number }) {
+    if (!u.key) return null;
+    if (u.key === "today") return <span className="bk-urgency today">⚠ {t.bookingsPage.urgency.today}</span>;
+    if (u.key === "tomorrow") return <span className="bk-urgency tomorrow">{t.bookingsPage.urgency.tomorrow}</span>;
+    if (u.key === "inDays") return <span className="bk-urgency upcoming">{t.bookingsPage.urgency.inDays(u.days)}</span>;
+    if (u.key === "inHouse") return <span className="bk-urgency inhouse">● {t.bookingsPage.urgency.inHouse}</span>;
+    if (u.key === "checkoutToday") return <span className="bk-urgency checkout-today">{t.bookingsPage.urgency.checkoutToday}</span>;
+    if (u.key === "lateCheckout") return <span className="bk-urgency late">⚠ {t.bookingsPage.urgency.lateCheckout}</span>;
+    return null;
+  }
+
+  function paymentBadge(b: Booking) {
+    if (b.paymentStatus === "paid") return <span className="bk-pay paid">{t.bookingsPage.paymentLabel.paid}</span>;
+    if (b.paymentStatus === "partial") {
+      const pct = Math.round((b.paidAmount / b.totalAmount) * 100);
+      return <span className="bk-pay partial">{t.bookingsPage.paymentPartial(pct)}</span>;
+    }
+    return <span className="bk-pay pending">{t.bookingsPage.paymentLabel.pending}</span>;
+  }
+
+  function cleanPhoneForLink(phone: string) {
+    return phone.replace(/[^\d]/g, "");
+  }
+
   return (
     <>
       <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", marginBottom: 20, flexWrap: "wrap", gap: 10 }}>
@@ -1787,49 +1919,148 @@ function BookingsPage({ goToSearch, t, lang }: { goToSearch: () => void; t: type
           <button className="btn btn-primary btn-sm" onClick={goToSearch}>{t.bookingsPage.newBooking}</button>
         </div>
       </div>
-      <div style={{ background: "#fff", border: "1px solid var(--line)", borderRadius: 14, padding: "12px 14px", marginBottom: 14, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-        <button className="btn btn-dark btn-sm" style={{ borderRadius: 50 }}>{t.bookingsPage.pillsAll}</button>
-        <button className="btn btn-secondary btn-sm" style={{ borderRadius: 50 }}>{t.bookingsPage.statuses.confirmed}</button>
-        <button className="btn btn-secondary btn-sm" style={{ borderRadius: 50 }}>{t.bookingsPage.statuses.pending}</button>
-        <button className="btn btn-secondary btn-sm" style={{ borderRadius: 50 }}>{t.bookingsPage.statuses.checkedin}</button>
-        <button className="btn btn-secondary btn-sm" style={{ borderRadius: 50 }}>{t.bookingsPage.statuses.cancelled}</button>
+
+      {/* QUICK STATS STRIP */}
+      <div className="bk-stats">
+        {stats.map((s, i) => (
+          <button
+            key={i}
+            className={`bk-stat ${filter === s.key ? "active" : ""}`}
+            onClick={() => setFilter((cur) => (cur === s.key ? "all" : s.key))}
+          >
+            <div className="bk-stat-icon" style={{ background: s.bg, color: s.color }}>{s.icon}</div>
+            <div className="bk-stat-info">
+              <div className="bk-stat-val">{s.val}</div>
+              <div className="bk-stat-lbl">{s.lbl}</div>
+              {s.sub !== "—" && <div className="bk-stat-sub">{s.sub}</div>}
+            </div>
+          </button>
+        ))}
       </div>
-      <div style={{ background: "#fff", border: "1px solid var(--line)", borderRadius: 14, overflow: "hidden" }}>
-        <table style={{ width: "100%", borderCollapse: "collapse" }}>
+
+      {/* FILTER PILLS */}
+      <div className="bk-pills">
+        {pills.map((p) => (
+          <button
+            key={p.k}
+            className={`bk-pill ${filter === p.k ? "active" : ""}`}
+            onClick={() => setFilter(p.k)}
+          >
+            {p.lbl}
+            {p.count !== undefined && <span className="count">{p.count}</span>}
+          </button>
+        ))}
+      </div>
+
+      {/* TABLE */}
+      <div className="bk-table">
+        <table>
           <thead>
-            <tr style={{ background: "var(--ghost)" }}>
-              {headers.map((h) => (
-                <th key={h} style={{ textAlign: "left", fontSize: 11, fontWeight: 500, color: "var(--muted)", textTransform: "uppercase", letterSpacing: ".6px", padding: "11px 16px" }}>{h}</th>
-              ))}
+            <tr>
+              <th>{t.bookingsPage.headers.ref}</th>
+              <th>{t.bookingsPage.headers.guest}</th>
+              <th>{t.bookingsPage.headers.property}</th>
+              <th>{t.bookingsPage.headers.dates}</th>
+              <th>{t.bookingsPage.headers.total}</th>
+              <th>{t.bookingsPage.headers.status}</th>
+              <th style={{ textAlign: "end" }}>{t.bookingsPage.headers.actions}</th>
             </tr>
           </thead>
           <tbody>
-            {BOOKINGS.map((b) => (
-              <tr key={b.ref} style={{ borderBottom: "1px solid var(--line)", cursor: "pointer" }}>
-                <td style={{ padding: "13px 16px", fontFamily: "monospace", fontSize: 12, color: "var(--text-2)" }}>{b.ref}</td>
-                <td style={{ padding: "13px 16px" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                    <div className="guest-avatar-sm">{b.guest.first[0]}{b.guest.last[0]}</div>
+            {filtered.length === 0 ? (
+              <tr>
+                <td colSpan={7}>
+                  <div className="bk-empty">{t.bookingsPage.noBookings}</div>
+                </td>
+              </tr>
+            ) : filtered.map(({ b, urgency, tier }) => (
+              <tr key={b.ref}>
+                <td>
+                  <div className="bk-ref-row">
+                    <div className={`bk-channel ${b.channel}`} title={t.bookingsPage.channels[b.channel]}>
+                      {CHANNEL_ICON[b.channel]}
+                    </div>
                     <div>
-                      <div style={{ fontWeight: 500, fontSize: 13 }}>{b.guest.first} {b.guest.last}</div>
-                      <div style={{ fontSize: 11, color: "var(--muted)" }}>{b.guest.id}</div>
+                      <div className="bk-ref">{b.ref}</div>
                     </div>
                   </div>
                 </td>
-                <td style={{ padding: "13px 16px" }}>
-                  <div style={{ fontSize: 13 }}>{pShortName(b.property, lang)}</div>
-                  <div style={{ fontSize: 11, color: "var(--muted)" }}>{pLoc(b.property, lang)}</div>
+                <td>
+                  <div className="bk-guest">
+                    <div className="guest-avatar-sm">{b.guest.first[0]}{b.guest.last[0]}</div>
+                    <div className="bk-guest-info">
+                      <div className="bk-guest-name">{b.guest.first} {b.guest.last}</div>
+                      <div className="bk-guest-id">{b.guest.id}</div>
+                      <span className={`bk-tier ${tier}`}>{t.bookingsPage.tier[tier]}</span>
+                    </div>
+                  </div>
                 </td>
-                <td style={{ padding: "13px 16px", fontSize: 12.5 }}>
-                  {formatDateShort(b.checkin)} → {formatDateShort(b.checkout)}
-                  <div style={{ fontSize: 11, color: "var(--muted)" }}>{t.bookingsPage.nightsLbl(b.nights)}</div>
+                <td>
+                  <div className="bk-prop-name">{pShortName(b.property, lang)}</div>
+                  <div className="bk-prop-sub">
+                    <span>{pLoc(b.property, lang)}</span>
+                    <span>·</span>
+                    <span className="bk-prop-guests"><Icon.Person size={10} /> {t.bookingsPage.guestsCount(b.guest.bookings > 0 ? Math.min(b.property.capacity, 2 + (b.nights % 3)) : 2)}</span>
+                  </div>
                 </td>
-                <td style={{ padding: "13px 16px", fontWeight: 600 }}>{b.total}</td>
-                <td style={{ padding: "13px 16px" }}>
-                  <span style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "3px 9px", borderRadius: 20, fontSize: 11.5, fontWeight: 500, background: statusBg[b.status], color: statusColor[b.status] }}>
-                    <span style={{ width: 6, height: 6, borderRadius: "50%", background: "currentColor" }} />
+                <td>
+                  <div className="bk-dates">{formatDateShort(b.checkin)} → {formatDateShort(b.checkout)}</div>
+                  <div className="bk-nights">{t.bookingsPage.nightsLbl(b.nights)}</div>
+                  {urgencyBadge(urgency)}
+                </td>
+                <td>
+                  <div className="bk-total">{b.total}</div>
+                  {paymentBadge(b)}
+                </td>
+                <td>
+                  <span className="bk-status" style={{ background: statusBg[b.status], color: statusColor[b.status] }}>
                     {t.bookingsPage.statuses[b.status]}
                   </span>
+                </td>
+                <td onClick={(e) => e.stopPropagation()}>
+                  <div className="bk-actions">
+                    <a
+                      className="bk-act call"
+                      href={`tel:${cleanPhoneForLink(b.guest.phone)}`}
+                      title={t.bookingsPage.actions.call}
+                    >
+                      <Icon.Phone size={14} />
+                    </a>
+                    <a
+                      className="bk-act wa"
+                      href={`https://wa.me/${cleanPhoneForLink(b.guest.phone)}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      title={t.bookingsPage.actions.whatsapp}
+                    >
+                      <Icon.WhatsApp size={14} />
+                    </a>
+                    {b.notes && (
+                      <button
+                        className="bk-act note"
+                        title={t.bookingsPage.actions.viewNotes}
+                        onClick={() => setNotePopover((cur) => (cur === b.ref ? null : b.ref))}
+                      >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                          <polyline points="14 2 14 8 20 8" />
+                          <line x1="8" y1="13" x2="16" y2="13" />
+                          <line x1="8" y1="17" x2="13" y2="17" />
+                        </svg>
+                        <span className="dot-note" />
+                      </button>
+                    )}
+                  </div>
+                  {notePopover === b.ref && b.notes && (
+                    <div
+                      className="bk-note-popover"
+                      style={{ marginTop: 6 }}
+                      onClick={(e) => { e.stopPropagation(); setNotePopover(null); }}
+                    >
+                      <b>{t.bookingsPage.actions.viewNotes}</b>
+                      {b.notes}
+                    </div>
+                  )}
                 </td>
               </tr>
             ))}
