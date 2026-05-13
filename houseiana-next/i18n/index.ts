@@ -289,6 +289,37 @@ interface Dict {
     closeBtn: string;
     waCancelGuestMsg: (first: string, ref: string, name: string, refundAmount: string, currency: string, refundNote: string) => string;
     waCancelOwnerMsg: (ownerFirst: string, ref: string, name: string, checkin: string, checkout: string, guestName: string) => string;
+    // refund block (also used in booking drawer)
+    refund: {
+      heading: string;
+      pendingHint: string;
+      requestedHint: string;
+      processedHint: string;
+      amountLabel: string;
+      requestBtn: string;
+      requestedBadge: string;
+      processedBadge: string;
+      requestedToast: string;
+    };
+  };
+  guestDetail: {
+    title: string;
+    closeBtn: string;
+    stats: { totalBookings: string; ltv: string; tier: string; lastStay: string };
+    actions: { call: string; whatsapp: string; addBooking: string };
+    refundsTitle: string;
+    refundsSubtitle: (n: number) => string;
+    requestRefundBtn: string;
+    sections: { current: string; upcoming: string; past: string };
+    emptyCurrent: string;
+    emptyUpcoming: string;
+    emptyPast: string;
+    shareBtn: string;
+    openBookingBtn: string;
+    statusFor: (s: string) => string;
+    nightsLine: (n: number) => string;
+    daysAway: (n: number) => string;
+    daysAgo: (n: number) => string;
   };
   kpis: {
     title: string;
@@ -631,6 +662,36 @@ export const DICT: Record<Lang, Dict> = {
         `Hi ${first}, your booking ${ref} for "${name}" has been cancelled.\n\nRefund: ${currency} ${refundAmount}${refundNote ? `\n${refundNote}` : ""}\n\nIf there's anything we can do to help, please reply to this message. — Houseiana`,
       waCancelOwnerMsg: (ownerFirst, ref, name, checkin, checkout, guestName) =>
         `Hi ${ownerFirst}, the booking on "${name}" (${ref}) has been cancelled.\n\nDates: ${checkin} → ${checkout}\nGuest: ${guestName}\n\nThe unit is now available again for those dates. — Houseiana`,
+      refund: {
+        heading: "Refund owed to guest",
+        pendingHint: "Send this refund request to the Accounts team to process.",
+        requestedHint: "Refund request sent to Accounts — awaiting processing.",
+        processedHint: "Refund has been processed and returned to the guest.",
+        amountLabel: "Amount to refund",
+        requestBtn: "Request refund from Accounts",
+        requestedBadge: "Requested",
+        processedBadge: "Processed",
+        requestedToast: "Refund request sent to Accounts team",
+      },
+    },
+    guestDetail: {
+      title: "Guest profile",
+      closeBtn: "Close",
+      stats: { totalBookings: "Bookings", ltv: "Lifetime value", tier: "Tier", lastStay: "Last stay" },
+      actions: { call: "Call", whatsapp: "WhatsApp", addBooking: "+ New booking" },
+      refundsTitle: "Pending refunds",
+      refundsSubtitle: (n) => `${n} cancelled booking${n === 1 ? "" : "s"} with refund owed`,
+      requestRefundBtn: "Request from Accounts",
+      sections: { current: "Current stays", upcoming: "Upcoming bookings", past: "Past bookings" },
+      emptyCurrent: "No current stays.",
+      emptyUpcoming: "No upcoming bookings.",
+      emptyPast: "No past bookings yet.",
+      shareBtn: "Share with guest",
+      openBookingBtn: "Open booking",
+      statusFor: (s) => s,
+      nightsLine: (n) => `${n} ${n === 1 ? "night" : "nights"}`,
+      daysAway: (n) => n === 0 ? "Today" : n === 1 ? "Tomorrow" : `In ${n} days`,
+      daysAgo: (n) => n === 0 ? "Today" : n === 1 ? "Yesterday" : `${n} days ago`,
     },
     kpis: {
       title: "My Performance", subtitle: "Sara Al-Mansoori · Sr. Booking Agent",
@@ -873,7 +934,7 @@ export const DICT: Record<Lang, Dict> = {
       title: "العملاء", subtitle: "قاعدة بيانات العملاء وسجل الحجوزات.",
       searchPlaceholder: "ابحث عن عميل...", addGuest: "+ إضافة عميل",
       stats: { total: "إجمالي العملاء", repeat: "عملاء متكررون", avgLtv: "متوسط قيمة العميل", vip: "عملاء VIP", thisMonth: "هذا الشهر", vipNote: "5+ حجوزات" },
-      headers: { guest: "العميل", contact: "وسيلة التواصل", nationality: "الجنسية", bookings: "الحجوزات", ltv: "قيمة العميل", lastStay: "آخر إقامة", tags: "وسوم" },
+      headers: { guest: "العميل", contact: "وسيلة التواصل", nationality: "الجنسية", bookings: "الحجوزات", ltv: "قيمة العميل", lastStay: "آخر إقامة", tags: "رسوم" },
       tags: { repeat: "متكرر", vip: "VIP", new: "جديد" },
       lastStays: { "G-1042": "منذ أسبوعين", "G-2018": "منذ 3 أيام", "G-0892": "الشهر الماضي", "G-1577": "منذ 5 أيام", "G-2204": "منذ شهرين", "G-0331": "اليوم" },
     },
@@ -945,6 +1006,36 @@ export const DICT: Record<Lang, Dict> = {
         `أهلاً ${first}، تم إلغاء حجزك ${ref} لـ "${name}".\n\nمبلغ الاسترداد: ${refundAmount} ${currency}${refundNote ? `\n${refundNote}` : ""}\n\nلو في أي حاجة نقدر نساعدك فيها، رد على الرسالة. — Houseiana`,
       waCancelOwnerMsg: (ownerFirst, ref, name, checkin, checkout, guestName) =>
         `أهلاً ${ownerFirst}، تم إلغاء الحجز على "${name}" (${ref}).\n\nالتواريخ: ${checkin} → ${checkout}\nالعميل: ${guestName}\n\nالوحدة أصبحت متاحة مرة أخرى لهذه التواريخ. — Houseiana`,
+      refund: {
+        heading: "مبلغ مسترد للعميل",
+        pendingHint: "ابعت طلب الاسترداد لقسم الحسابات علشان يبدأوا التنفيذ.",
+        requestedHint: "تم إرسال طلب الاسترداد للحسابات — في انتظار التنفيذ.",
+        processedHint: "تم تنفيذ الاسترداد وإرجاع المبلغ للعميل.",
+        amountLabel: "المبلغ المطلوب استرداده",
+        requestBtn: "طلب الاسترداد من الحسابات",
+        requestedBadge: "تم الطلب",
+        processedBadge: "تم التنفيذ",
+        requestedToast: "تم إرسال طلب الاسترداد لقسم الحسابات",
+      },
+    },
+    guestDetail: {
+      title: "ملف العميل",
+      closeBtn: "إغلاق",
+      stats: { totalBookings: "الحجوزات", ltv: "قيمة العميل", tier: "الفئة", lastStay: "آخر إقامة" },
+      actions: { call: "اتصال", whatsapp: "واتساب", addBooking: "+ حجز جديد" },
+      refundsTitle: "مدفوعات مستردة معلّقة",
+      refundsSubtitle: (n) => `${n} حجز ملغى بمبلغ مستحق الرد`,
+      requestRefundBtn: "طلب من الحسابات",
+      sections: { current: "إقامات حالية", upcoming: "حجوزات قادمة", past: "حجوزات سابقة" },
+      emptyCurrent: "لا توجد إقامات حالية.",
+      emptyUpcoming: "لا توجد حجوزات قادمة.",
+      emptyPast: "لا توجد حجوزات سابقة.",
+      shareBtn: "مشاركة مع العميل",
+      openBookingBtn: "فتح الحجز",
+      statusFor: (s) => s,
+      nightsLine: (n) => `${n} ${n === 1 ? "ليلة" : "ليالٍ"}`,
+      daysAway: (n) => n === 0 ? "اليوم" : n === 1 ? "بكرة" : `خلال ${n} أيام`,
+      daysAgo: (n) => n === 0 ? "اليوم" : n === 1 ? "أمس" : `منذ ${n} أيام`,
     },
     kpis: {
       title: "أدائي", subtitle: "سارة المنصوري · كبير موظفي الحجز",

@@ -71,6 +71,7 @@ export interface Guest {
 
 export type BookingChannel = "wa" | "call" | "web" | "direct";
 export type PaymentStatus = "paid" | "partial" | "pending";
+export type RefundStatus = "none" | "requested" | "processed";
 
 export interface Booking {
   ref: string;
@@ -85,6 +86,8 @@ export interface Booking {
   status: "confirmed" | "pending" | "checkedin" | "checkedout" | "cancelled";
   channel: BookingChannel;
   paymentStatus: PaymentStatus;
+  refundAmount: number;       // amount owed back to guest (0 if none)
+  refundStatus: RefundStatus; // none / agent has requested from Accounts / processed
   notes?: string;
 }
 
@@ -384,26 +387,17 @@ export const GUESTS: Guest[] = [
 export const TODAY_STR = "2026-05-13";
 
 export const BOOKINGS: Booking[] = [
-  // Ahmed (VIP) checking in TODAY · Nile Plaza · WA · paid
-  { ref: "HSI-A8K2P9", guest: GUESTS[0], property: PROPERTIES[0], checkin: "2026-05-13", checkout: "2026-05-17", nights: 4, total: "EGP 16,250", totalAmount: 16250, paidAmount: 16250, status: "confirmed", channel: "wa", paymentStatus: "paid", notes: "Late check-in around 22:00, arriving from CAI." },
-  // Fatima (Repeat) checking OUT today · Zamalek · WA · paid · in-house
-  { ref: "HSI-B3M7L1", guest: GUESTS[1], property: PROPERTIES[4], checkin: "2026-05-09", checkout: "2026-05-13", nights: 4, total: "EGP 8,370", totalAmount: 8370, paidAmount: 8370, status: "checkedin", channel: "wa", paymentStatus: "paid" },
-  // Hossam (Repeat) IN-HOUSE · Cairo Festival Penthouse · call · paid
-  { ref: "HSI-C5N4Q8", guest: GUESTS[2], property: PROPERTIES[1], checkin: "2026-05-10", checkout: "2026-05-16", nights: 6, total: "EGP 51,300", totalAmount: 51300, paidAmount: 51300, status: "checkedin", channel: "call", paymentStatus: "paid", notes: "Will ask about extending stay." },
-  // Layla (VIP) checking in TOMORROW · Heliopolis · WA · PENDING PAYMENT
-  { ref: "HSI-D7R2X4", guest: GUESTS[3], property: PROPERTIES[3], checkin: "2026-05-14", checkout: "2026-05-17", nights: 3, total: "EGP 6,540", totalAmount: 6540, paidAmount: 0, status: "pending", channel: "wa", paymentStatus: "pending", notes: "Awaiting InstaPay transfer." },
-  // Omar (Repeat) past · New Cairo · web · paid
-  { ref: "HSI-E1T9V6", guest: GUESTS[4], property: PROPERTIES[6], checkin: "2026-05-06", checkout: "2026-05-09", nights: 3, total: "EGP 3,930", totalAmount: 3930, paidAmount: 3930, status: "checkedout", channel: "web", paymentStatus: "paid" },
-  // Sara (New) in 7 days · Maadi Studio · call · PARTIAL 50%
-  { ref: "HSI-F4W3Y7", guest: GUESTS[5], property: PROPERTIES[2], checkin: "2026-05-20", checkout: "2026-05-23", nights: 3, total: "EGP 4,130", totalAmount: 4130, paidAmount: 2065, status: "confirmed", channel: "call", paymentStatus: "partial", notes: "Balance due 3 days before check-in." },
-  // Layla (VIP) far future · Sahel Villa · WA · PARTIAL 50%
-  { ref: "HSI-G2K5N8", guest: GUESTS[3], property: PROPERTIES[5], checkin: "2026-06-15", checkout: "2026-06-22", nights: 7, total: "EGP 28,050", totalAmount: 28050, paidAmount: 14025, status: "confirmed", channel: "wa", paymentStatus: "partial", notes: "Family of 8 + chef requested." },
-  // Ahmed (VIP) checking in TOMORROW (1 night) · Maadi Studio · call · paid
-  { ref: "HSI-H4M9P2", guest: GUESTS[0], property: PROPERTIES[2], checkin: "2026-05-14", checkout: "2026-05-15", nights: 1, total: "EGP 1,710", totalAmount: 1710, paidAmount: 1710, status: "confirmed", channel: "call", paymentStatus: "paid", notes: "1-night business stay." },
-  // Fatima (Repeat) in 2 days · Sahel Villa · WA · PARTIAL
-  { ref: "HSI-J7Q1R5", guest: GUESTS[1], property: PROPERTIES[5], checkin: "2026-05-15", checkout: "2026-05-18", nights: 3, total: "EGP 12,650", totalAmount: 12650, paidAmount: 6325, status: "confirmed", channel: "wa", paymentStatus: "partial" },
-  // Hossam (Repeat) cancelled · Alexandria · web · refunded
-  { ref: "HSI-K3T8V6", guest: GUESTS[2], property: PROPERTIES[7], checkin: "2026-04-25", checkout: "2026-04-29", nights: 4, total: "EGP 4,500", totalAmount: 4500, paidAmount: 4500, status: "cancelled", channel: "web", paymentStatus: "paid" },
+  { ref: "HSI-A8K2P9", guest: GUESTS[0], property: PROPERTIES[0], checkin: "2026-05-13", checkout: "2026-05-17", nights: 4, total: "EGP 16,250", totalAmount: 16250, paidAmount: 16250, status: "confirmed", channel: "wa", paymentStatus: "paid", refundAmount: 0, refundStatus: "none", notes: "Late check-in around 22:00, arriving from CAI." },
+  { ref: "HSI-B3M7L1", guest: GUESTS[1], property: PROPERTIES[4], checkin: "2026-05-09", checkout: "2026-05-13", nights: 4, total: "EGP 8,370", totalAmount: 8370, paidAmount: 8370, status: "checkedin", channel: "wa", paymentStatus: "paid", refundAmount: 0, refundStatus: "none" },
+  { ref: "HSI-C5N4Q8", guest: GUESTS[2], property: PROPERTIES[1], checkin: "2026-05-10", checkout: "2026-05-16", nights: 6, total: "EGP 51,300", totalAmount: 51300, paidAmount: 51300, status: "checkedin", channel: "call", paymentStatus: "paid", refundAmount: 0, refundStatus: "none", notes: "Will ask about extending stay." },
+  { ref: "HSI-D7R2X4", guest: GUESTS[3], property: PROPERTIES[3], checkin: "2026-05-14", checkout: "2026-05-17", nights: 3, total: "EGP 6,540", totalAmount: 6540, paidAmount: 0, status: "pending", channel: "wa", paymentStatus: "pending", refundAmount: 0, refundStatus: "none", notes: "Awaiting InstaPay transfer." },
+  { ref: "HSI-E1T9V6", guest: GUESTS[4], property: PROPERTIES[6], checkin: "2026-05-06", checkout: "2026-05-09", nights: 3, total: "EGP 3,930", totalAmount: 3930, paidAmount: 3930, status: "checkedout", channel: "web", paymentStatus: "paid", refundAmount: 0, refundStatus: "none" },
+  { ref: "HSI-F4W3Y7", guest: GUESTS[5], property: PROPERTIES[2], checkin: "2026-05-20", checkout: "2026-05-23", nights: 3, total: "EGP 4,130", totalAmount: 4130, paidAmount: 2065, status: "confirmed", channel: "call", paymentStatus: "partial", refundAmount: 0, refundStatus: "none", notes: "Balance due 3 days before check-in." },
+  { ref: "HSI-G2K5N8", guest: GUESTS[3], property: PROPERTIES[5], checkin: "2026-06-15", checkout: "2026-06-22", nights: 7, total: "EGP 28,050", totalAmount: 28050, paidAmount: 14025, status: "confirmed", channel: "wa", paymentStatus: "partial", refundAmount: 0, refundStatus: "none", notes: "Family of 8 + chef requested." },
+  { ref: "HSI-H4M9P2", guest: GUESTS[0], property: PROPERTIES[2], checkin: "2026-05-14", checkout: "2026-05-15", nights: 1, total: "EGP 1,710", totalAmount: 1710, paidAmount: 1710, status: "confirmed", channel: "call", paymentStatus: "paid", refundAmount: 0, refundStatus: "none", notes: "1-night business stay." },
+  { ref: "HSI-J7Q1R5", guest: GUESTS[1], property: PROPERTIES[5], checkin: "2026-05-15", checkout: "2026-05-18", nights: 3, total: "EGP 12,650", totalAmount: 12650, paidAmount: 6325, status: "confirmed", channel: "wa", paymentStatus: "partial", refundAmount: 0, refundStatus: "none" },
+  // Hossam · cancelled within free window · full refund pending Accounts approval
+  { ref: "HSI-K3T8V6", guest: GUESTS[2], property: PROPERTIES[7], checkin: "2026-04-25", checkout: "2026-04-29", nights: 4, total: "EGP 4,500", totalAmount: 4500, paidAmount: 4500, status: "cancelled", channel: "web", paymentStatus: "paid", refundAmount: 4500, refundStatus: "none", notes: "Cancelled by guest 10 days before check-in." },
 ];
 
 export interface Destination {
