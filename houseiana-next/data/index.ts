@@ -88,6 +88,7 @@ export interface Booking {
   paymentStatus: PaymentStatus;
   refundAmount: number;       // amount owed back to guest (0 if none)
   refundStatus: RefundStatus; // none / agent has requested from Accounts / processed
+  holdUntil?: string | null;  // ISO datetime — while in future + status=pending, the unit is on hold
   notes?: string;
 }
 
@@ -385,12 +386,14 @@ export const GUESTS: Guest[] = [
 
 // Anchored to a fixed "today" of 2026-05-13 so urgency states are predictable in the demo.
 export const TODAY_STR = "2026-05-13";
+// Default hold duration when sending a payment link (1 hour in ms)
+export const HOLD_DURATION_MS = 60 * 60 * 1000;
 
 export const BOOKINGS: Booking[] = [
   { ref: "HSI-A8K2P9", guest: GUESTS[0], property: PROPERTIES[0], checkin: "2026-05-13", checkout: "2026-05-17", nights: 4, total: "EGP 16,250", totalAmount: 16250, paidAmount: 16250, status: "confirmed", channel: "wa", paymentStatus: "paid", refundAmount: 0, refundStatus: "none", notes: "Late check-in around 22:00, arriving from CAI." },
   { ref: "HSI-B3M7L1", guest: GUESTS[1], property: PROPERTIES[4], checkin: "2026-05-09", checkout: "2026-05-13", nights: 4, total: "EGP 8,370", totalAmount: 8370, paidAmount: 8370, status: "checkedin", channel: "wa", paymentStatus: "paid", refundAmount: 0, refundStatus: "none" },
   { ref: "HSI-C5N4Q8", guest: GUESTS[2], property: PROPERTIES[1], checkin: "2026-05-10", checkout: "2026-05-16", nights: 6, total: "EGP 51,300", totalAmount: 51300, paidAmount: 51300, status: "checkedin", channel: "call", paymentStatus: "paid", refundAmount: 0, refundStatus: "none", notes: "Will ask about extending stay." },
-  { ref: "HSI-D7R2X4", guest: GUESTS[3], property: PROPERTIES[3], checkin: "2026-05-14", checkout: "2026-05-17", nights: 3, total: "EGP 6,540", totalAmount: 6540, paidAmount: 0, status: "pending", channel: "wa", paymentStatus: "pending", refundAmount: 0, refundStatus: "none", notes: "Awaiting InstaPay transfer." },
+  { ref: "HSI-D7R2X4", guest: GUESTS[3], property: PROPERTIES[3], checkin: "2026-05-14", checkout: "2026-05-17", nights: 3, total: "EGP 6,540", totalAmount: 6540, paidAmount: 0, status: "pending", channel: "wa", paymentStatus: "pending", refundAmount: 0, refundStatus: "none", holdUntil: "2026-05-13T16:30:00Z", notes: "Awaiting InstaPay transfer." },
   { ref: "HSI-E1T9V6", guest: GUESTS[4], property: PROPERTIES[6], checkin: "2026-05-06", checkout: "2026-05-09", nights: 3, total: "EGP 3,930", totalAmount: 3930, paidAmount: 3930, status: "checkedout", channel: "web", paymentStatus: "paid", refundAmount: 0, refundStatus: "none" },
   { ref: "HSI-F4W3Y7", guest: GUESTS[5], property: PROPERTIES[2], checkin: "2026-05-20", checkout: "2026-05-23", nights: 3, total: "EGP 4,130", totalAmount: 4130, paidAmount: 2065, status: "confirmed", channel: "call", paymentStatus: "partial", refundAmount: 0, refundStatus: "none", notes: "Balance due 3 days before check-in." },
   { ref: "HSI-G2K5N8", guest: GUESTS[3], property: PROPERTIES[5], checkin: "2026-06-15", checkout: "2026-06-22", nights: 7, total: "EGP 28,050", totalAmount: 28050, paidAmount: 14025, status: "confirmed", channel: "wa", paymentStatus: "partial", refundAmount: 0, refundStatus: "none", notes: "Family of 8 + chef requested." },

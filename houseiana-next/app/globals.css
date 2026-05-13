@@ -1106,6 +1106,100 @@ input[type=range]::-webkit-slider-thumb{
 .gd-bk-actions a.wa:hover{filter:brightness(1.05)}
 .gd-bk-actions button.open:hover{background:#fff;border-color:var(--line)}
 
+/* ============ HOLD INDICATORS ============ */
+.property-hold{
+  position:absolute;inset:0;background:rgba(29,36,43,.55);backdrop-filter:blur(2px);
+  display:grid;place-items:center;color:#fff;text-align:center;
+  border-radius:0;
+}
+.property-hold-badge{
+  background:var(--orange);color:#fff;padding:8px 14px;border-radius:50px;
+  font-size:12px;font-weight:600;display:inline-flex;align-items:center;gap:6px;
+  box-shadow:var(--shadow-md);text-transform:uppercase;letter-spacing:.5px;
+}
+.property-hold-time{
+  margin-top:6px;font-size:11px;color:rgba(255,255,255,.85);
+  font-family:-apple-system, monospace;
+}
+
+/* hold banner inside detail / booking drawer */
+.hold-banner{
+  background:#FEF1E1;border:1px solid #F2C088;border-radius:10px;
+  padding:12px 14px;display:flex;gap:12px;align-items:flex-start;margin-bottom:10px;
+}
+.hold-banner.expired{background:var(--red-soft);border-color:#F2A8A2}
+.hold-banner-icon{
+  width:32px;height:32px;border-radius:8px;background:#fff;color:var(--orange);
+  display:grid;place-items:center;flex-shrink:0;
+}
+.hold-banner.expired .hold-banner-icon{color:var(--red)}
+.hold-banner-body{flex:1;min-width:0}
+.hold-banner-title{font-size:13px;font-weight:600;color:var(--charcoal);margin-bottom:3px}
+.hold-banner-text{font-size:12px;color:var(--text-2);line-height:1.5;margin-bottom:10px}
+.hold-timer{
+  display:flex;align-items:center;justify-content:space-between;
+  background:#fff;border-radius:8px;padding:9px 12px;margin-bottom:10px;
+}
+.hold-timer-lbl{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-weight:500}
+.hold-timer-val{
+  font-size:17px;font-weight:600;color:var(--orange);
+  font-family:-apple-system, monospace;letter-spacing:-.5px;
+}
+.hold-banner.expired .hold-timer-val{color:var(--red)}
+.hold-banner-actions{display:flex;gap:6px;flex-wrap:wrap}
+.hold-banner-actions button{flex:1}
+
+/* ============ QUOTE DIALOG ============ */
+.quote-overlay{
+  position:fixed;inset:0;background:rgba(29,36,43,.55);
+  z-index:80;display:grid;place-items:center;padding:20px;
+}
+.quote-dialog{
+  background:#fff;border-radius:14px;padding:0;max-width:520px;width:100%;
+  max-height:90vh;overflow:hidden;box-shadow:var(--shadow-lg);
+  display:flex;flex-direction:column;
+}
+.quote-dialog-head{
+  padding:16px 20px;border-bottom:1px solid var(--line);
+  display:flex;align-items:center;justify-content:space-between;
+}
+.quote-dialog-title{font-size:15px;font-weight:600;display:flex;align-items:center;gap:8px}
+.quote-dialog-title svg{color:var(--charcoal)}
+.quote-dialog-body{padding:16px 20px;overflow-y:auto;flex:1}
+.quote-dialog-foot{
+  padding:12px 20px;border-top:1px solid var(--line);background:var(--ghost);
+  display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;
+}
+
+.quote-section{margin-bottom:14px}
+.quote-section-title{
+  font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;
+  margin-bottom:6px;
+}
+.quote-or{
+  display:flex;align-items:center;gap:10px;margin:12px 0;
+  color:var(--muted);font-size:11px;
+}
+.quote-or::before,.quote-or::after{content:'';flex:1;height:1px;background:var(--line)}
+
+.quote-preview{
+  background:var(--ghost);border-radius:10px;padding:12px 14px;
+  font-family:-apple-system, monospace;font-size:12px;color:var(--text-2);
+  line-height:1.55;white-space:pre-wrap;
+  max-height:180px;overflow-y:auto;
+}
+.quote-meta{
+  display:flex;align-items:center;justify-content:space-between;
+  font-size:11.5px;color:var(--muted);margin-top:8px;
+}
+.quote-meta .ref{font-family:-apple-system, monospace;color:var(--text-2);font-weight:500}
+
+.quote-guest-pick{
+  background:#fff;border:1px solid var(--line);border-radius:8px;
+  max-height:160px;overflow-y:auto;margin-top:6px;
+}
+.quote-guest-pick .guest-row{padding:8px 10px}
+
 @media(max-width:1300px){
   .bk-stats{grid-template-columns:repeat(3,1fr)}
 }

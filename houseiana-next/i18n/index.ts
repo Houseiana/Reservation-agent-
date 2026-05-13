@@ -19,6 +19,8 @@ interface Dict {
     discount: string;
     youBadge: string;
     instantBook: string;
+    onHold: string;
+    onHoldUntil: (timeLeft: string) => string;
     save: string;
     share: string;
     print: string;
@@ -129,6 +131,43 @@ interface Dict {
     inclusive: (currency: string, price: string, nights: number) => string;
     waMsg: (ownerFirst: string, propertyName: string) => string;
     shareMsg: (name: string, loc: string, currency: string, price: string, url: string) => string;
+    // QUOTE
+    quoteTitle: string;
+    quoteSubtitle: string;
+    quoteOpenBtn: string;
+    quoteDialogTitle: string;
+    quoteGuestPicker: string;
+    quoteGuestPickerPlaceholder: string;
+    quoteOrType: string;
+    quotePhoneLabel: string;
+    quotePhonePlaceholder: string;
+    quoteNameLabel: string;
+    quoteNamePlaceholder: string;
+    quotePreviewLabel: string;
+    quoteValidLabel: string;
+    quoteRefLabel: string;
+    quoteSendWA: string;
+    quoteSendEmail: string;
+    quoteCancel: string;
+    quoteSentToast: string;
+    quoteEmailLabel: string;
+    quoteEmailPlaceholder: string;
+    quoteMissingPhone: string;
+    quoteMsg: (
+      firstName: string,
+      qref: string,
+      propName: string,
+      loc: string,
+      checkin: string,
+      checkout: string,
+      nights: number,
+      nightlyLine: string,
+      cleaning: string,
+      utilities: string,
+      bookingFee: string,
+      total: string,
+      currency: string,
+    ) => string;
   };
   booking: {
     bookHeading: (name: string) => string;
@@ -184,6 +223,10 @@ interface Dict {
     waInstapayMsg: (first: string, name: string, currency: string, amount: string, handle: string) => string;
     confirmed: string;
     confirmedSub: string;
+    savedPendingHeadline: string;
+    savedPendingSub: (timeLeft: string) => string;
+    saveAndHoldBtn: string;
+    savedAsPendingToast: string;
     confDetails: { guest: string; property: string; checkin: string; checkout: string; guests: string; nights: string };
     shareGuestConfirm: string;
     notifyOwner: string;
@@ -289,6 +332,18 @@ interface Dict {
     closeBtn: string;
     waCancelGuestMsg: (first: string, ref: string, name: string, refundAmount: string, currency: string, refundNote: string) => string;
     waCancelOwnerMsg: (ownerFirst: string, ref: string, name: string, checkin: string, checkout: string, guestName: string) => string;
+    // hold-on-unit block
+    hold: {
+      heading: string;
+      activeHint: string;
+      expiredHint: string;
+      timeLeftLabel: string;
+      expiredLabel: string;
+      confirmPaymentBtn: string;
+      releaseHoldBtn: string;
+      confirmedToast: string;
+      releasedToast: string;
+    };
     // refund block (also used in booking drawer)
     refund: {
       heading: string;
@@ -407,7 +462,10 @@ export const DICT: Record<Lang, Dict> = {
       egypt: "🇪🇬 Egypt", night: "night", nights: "nights", guest: "guest", guests: "guests",
       bookings: "bookings", reviews: "reviews", photos: "photos", luxury: "Luxury", standard: "Standard",
       any: "Any", all: "All", or: "OR CREATE NEW", total: "total", discount: "Discount",
-      youBadge: "YOU", instantBook: "Instant book", save: "Save", share: "Share",
+      youBadge: "YOU", instantBook: "Instant book",
+      onHold: "On hold",
+      onHoldUntil: (timeLeft) => `On hold · ${timeLeft} left`,
+      save: "Save", share: "Share",
       print: "Print voucher", resend: "Resend email", done: "Done", cancel: "Cancel",
       next: "Continue →", back: "← Back", step: "Step", of: "of",
       confirmBooking: "Confirm booking →", continueBooking: "Continue to booking →",
@@ -483,6 +541,29 @@ export const DICT: Record<Lang, Dict> = {
       waMsg: (first, name) => `Hi ${first}, this is Sara from Houseiana. A guest is interested in your "${name}" — could you confirm availability please?`,
       shareMsg: (name, loc, c, price, url) =>
         `Check out this property on Houseiana: ${name} — ${loc}\n${c} ${price}/night\n${url}`,
+      quoteTitle: "Send a price quote",
+      quoteSubtitle: "Send the guest a detailed quote with dates, full breakdown, and total. Valid for 24 hours.",
+      quoteOpenBtn: "Send price quote",
+      quoteDialogTitle: "Send price quote",
+      quoteGuestPicker: "Pick an existing guest",
+      quoteGuestPickerPlaceholder: "Search by name, phone, or ID…",
+      quoteOrType: "Or type a new contact",
+      quotePhoneLabel: "Phone (WhatsApp)",
+      quotePhonePlaceholder: "+20 1xx xxx xxxx",
+      quoteNameLabel: "Guest first name",
+      quoteNamePlaceholder: "First name",
+      quoteEmailLabel: "Email (optional)",
+      quoteEmailPlaceholder: "guest@email.com",
+      quotePreviewLabel: "Preview",
+      quoteValidLabel: "Valid for 24 hours",
+      quoteRefLabel: "Quote ref",
+      quoteSendWA: "Send via WhatsApp",
+      quoteSendEmail: "Send via email",
+      quoteCancel: "Cancel",
+      quoteSentToast: "Quote sent",
+      quoteMissingPhone: "Enter a phone number first",
+      quoteMsg: (firstName, qref, propName, loc, checkin, checkout, nights, nightlyLine, cleaning, utilities, bookingFee, total, currency) =>
+        `Hi ${firstName}, here's your Houseiana quote ${qref} 🏡\n\n📍 ${propName}\n${loc}\n\n📅 Check-in: ${checkin}\n📅 Check-out: ${checkout}\n🌙 ${nights} nights\n\n💰 Price breakdown:\n• ${nightlyLine}\n• Cleaning: ${cleaning}\n• Utilities (water & electricity): ${utilities}\n• Booking fee (10%): ${bookingFee}\n──────────\nTotal: ${currency} ${total}\n\n⏱ This quote is valid for 24 hours.\n\nTo confirm, reply to this message and we'll send the secure payment link. — Houseiana`,
     },
     booking: {
       bookHeading: (name) => `Book — ${name}`,
@@ -541,6 +622,10 @@ export const DICT: Record<Lang, Dict> = {
         `Hi ${first}, please transfer the booking amount via InstaPay:\n\nInstaPay: ${handle}\nAmount: ${currency} ${amount}\nFor: ${name}\n\nAfter you transfer, send us a screenshot of the receipt and we'll confirm your booking right away.`,
       confirmed: "Booking confirmed",
       confirmedSub: "Send the confirmation to the guest and notify the property owner.",
+      savedPendingHeadline: "Saved as pending — unit on hold",
+      savedPendingSub: (timeLeft) => `We're holding the unit for the next ${timeLeft}. Once the guest sends proof of payment, come back to the booking and confirm.`,
+      saveAndHoldBtn: "Save & hold for 1h",
+      savedAsPendingToast: "Booking saved as pending — unit on hold for 1 hour",
       confDetails: { guest: "Guest", property: "Property", checkin: "Check-in", checkout: "Check-out", guests: "Guests", nights: "Nights" },
       shareGuestConfirm: "Share confirmation with guest",
       notifyOwner: "Notify property owner",
@@ -662,6 +747,17 @@ export const DICT: Record<Lang, Dict> = {
         `Hi ${first}, your booking ${ref} for "${name}" has been cancelled.\n\nRefund: ${currency} ${refundAmount}${refundNote ? `\n${refundNote}` : ""}\n\nIf there's anything we can do to help, please reply to this message. — Houseiana`,
       waCancelOwnerMsg: (ownerFirst, ref, name, checkin, checkout, guestName) =>
         `Hi ${ownerFirst}, the booking on "${name}" (${ref}) has been cancelled.\n\nDates: ${checkin} → ${checkout}\nGuest: ${guestName}\n\nThe unit is now available again for those dates. — Houseiana`,
+      hold: {
+        heading: "Unit on hold — awaiting guest payment",
+        activeHint: "The unit is reserved while the guest pays. After they send proof of payment, click below to confirm.",
+        expiredHint: "The 1-hour hold has expired. Release the unit or extend the hold manually.",
+        timeLeftLabel: "Time left on hold",
+        expiredLabel: "Expired",
+        confirmPaymentBtn: "Mark payment received → Confirm booking",
+        releaseHoldBtn: "Release hold",
+        confirmedToast: "Payment confirmed — booking is now confirmed",
+        releasedToast: "Hold released — unit is available again",
+      },
       refund: {
         heading: "Refund owed to guest",
         pendingHint: "Send this refund request to the Accounts team to process.",
@@ -751,7 +847,10 @@ export const DICT: Record<Lang, Dict> = {
       egypt: "🇪🇬 مصر", night: "ليلة", nights: "ليالٍ", guest: "ضيف", guests: "ضيف",
       bookings: "حجز", reviews: "تقييم", photos: "صورة", luxury: "فاخر", standard: "عادي",
       any: "أي عدد", all: "الكل", or: "أو أضف عميل جديد", total: "إجمالي", discount: "خصم",
-      youBadge: "أنت", instantBook: "حجز فوري", save: "حفظ", share: "مشاركة",
+      youBadge: "أنت", instantBook: "حجز فوري",
+      onHold: "محجوز مؤقتاً",
+      onHoldUntil: (timeLeft) => `محجوز مؤقتاً · باقي ${timeLeft}`,
+      save: "حفظ", share: "مشاركة",
       print: "طباعة الفاوتشر", resend: "إعادة إرسال", done: "تم", cancel: "إلغاء",
       next: "متابعة ←", back: "→ رجوع", step: "الخطوة", of: "من",
       confirmBooking: "تأكيد الحجز ←", continueBooking: "متابعة للحجز ←",
@@ -827,6 +926,29 @@ export const DICT: Record<Lang, Dict> = {
       waMsg: (first, name) => `أهلاً ${first}، أنا سارة من Houseiana. عميل مهتم بـ "${name}" — ممكن تأكدلي توفّرها؟`,
       shareMsg: (name, loc, c, price, url) =>
         `شوف العقار ده على Houseiana: ${name} — ${loc}\n${price} ${c}/ليلة\n${url}`,
+      quoteTitle: "إرسال عرض سعر",
+      quoteSubtitle: "ابعت للعميل عرض سعر مفصل بالتواريخ والتفاصيل والإجمالي. صالح لمدة 24 ساعة.",
+      quoteOpenBtn: "إرسال عرض سعر",
+      quoteDialogTitle: "إرسال عرض سعر للعميل",
+      quoteGuestPicker: "اختر عميل موجود",
+      quoteGuestPickerPlaceholder: "ابحث بالاسم أو التليفون أو الرقم…",
+      quoteOrType: "أو أدخل بيانات عميل جديد",
+      quotePhoneLabel: "التليفون (واتساب)",
+      quotePhonePlaceholder: "+20 1xx xxx xxxx",
+      quoteNameLabel: "الاسم الأول",
+      quoteNamePlaceholder: "الاسم الأول",
+      quoteEmailLabel: "البريد (اختياري)",
+      quoteEmailPlaceholder: "guest@email.com",
+      quotePreviewLabel: "معاينة العرض",
+      quoteValidLabel: "صالح لمدة 24 ساعة",
+      quoteRefLabel: "رقم العرض",
+      quoteSendWA: "إرسال عبر واتساب",
+      quoteSendEmail: "إرسال عبر الإيميل",
+      quoteCancel: "إلغاء",
+      quoteSentToast: "تم إرسال عرض السعر",
+      quoteMissingPhone: "ادخل رقم تليفون أولاً",
+      quoteMsg: (firstName, qref, propName, loc, checkin, checkout, nights, nightlyLine, cleaning, utilities, bookingFee, total, currency) =>
+        `أهلاً ${firstName}، ده عرض السعر بتاعك من Houseiana ${qref} 🏡\n\n📍 ${propName}\n${loc}\n\n📅 الوصول: ${checkin}\n📅 المغادرة: ${checkout}\n🌙 ${nights} ليالٍ\n\n💰 تفاصيل السعر:\n• ${nightlyLine}\n• رسوم نظافة: ${cleaning}\n• مرافق (مياه وكهرباء): ${utilities}\n• مصاريف حجز (10%): ${bookingFee}\n──────────\nالإجمالي: ${total} ${currency}\n\n⏱ العرض ده صالح لمدة 24 ساعة.\n\nللتأكيد، رد على الرسالة وهنبعتلك لينك الدفع الآمن. — Houseiana`,
     },
     booking: {
       bookHeading: (name) => `حجز — ${name}`,
@@ -885,6 +1007,10 @@ export const DICT: Record<Lang, Dict> = {
         `أهلاً ${first}، من فضلك حوّل مبلغ الحجز عبر InstaPay:\n\nالحساب: ${handle}\nالمبلغ: ${amount} ${currency}\nلـ: ${name}\n\nبعد التحويل، ابعتلنا سكرين شوت من الإيصال وهنأكد حجزك على طول.`,
       confirmed: "تم تأكيد الحجز",
       confirmedSub: "ابعت التأكيد للعميل، وأبلِغ مالك العقار بالحجز.",
+      savedPendingHeadline: "تم الحفظ كحجز معلّق — الوحدة محجوزة مؤقتاً",
+      savedPendingSub: (timeLeft) => `الوحدة محجوزة لمدة ${timeLeft} القادمة. لما العميل يبعت إثبات الدفع، ارجع للحجز واضغط تأكيد.`,
+      saveAndHoldBtn: "حفظ وحجز لساعة",
+      savedAsPendingToast: "تم حفظ الحجز كمعلّق — الوحدة محجوزة لمدة ساعة",
       confDetails: { guest: "العميل", property: "العقار", checkin: "الوصول", checkout: "المغادرة", guests: "الضيوف", nights: "الليالي" },
       shareGuestConfirm: "إرسال تأكيد الحجز للعميل",
       notifyOwner: "إخطار مالك العقار",
@@ -1006,6 +1132,17 @@ export const DICT: Record<Lang, Dict> = {
         `أهلاً ${first}، تم إلغاء حجزك ${ref} لـ "${name}".\n\nمبلغ الاسترداد: ${refundAmount} ${currency}${refundNote ? `\n${refundNote}` : ""}\n\nلو في أي حاجة نقدر نساعدك فيها، رد على الرسالة. — Houseiana`,
       waCancelOwnerMsg: (ownerFirst, ref, name, checkin, checkout, guestName) =>
         `أهلاً ${ownerFirst}، تم إلغاء الحجز على "${name}" (${ref}).\n\nالتواريخ: ${checkin} → ${checkout}\nالعميل: ${guestName}\n\nالوحدة أصبحت متاحة مرة أخرى لهذه التواريخ. — Houseiana`,
+      hold: {
+        heading: "الوحدة محجوزة مؤقتاً — في انتظار دفع العميل",
+        activeHint: "الوحدة محجوزة للعميل حالياً لحد ما يدفع. لما يبعت إثبات الدفع، اضغط تأكيد.",
+        expiredHint: "انتهت ساعة الحجز المؤقت. إما تفك الحجز أو تمدد المدة يدوياً.",
+        timeLeftLabel: "الوقت المتبقي للحجز المؤقت",
+        expiredLabel: "انتهى",
+        confirmPaymentBtn: "تم استلام الدفع — تأكيد الحجز",
+        releaseHoldBtn: "فك الحجز المؤقت",
+        confirmedToast: "تم تأكيد الدفع — الحجز أصبح مؤكداً",
+        releasedToast: "تم فك الحجز المؤقت — الوحدة متاحة مرة أخرى",
+      },
       refund: {
         heading: "مبلغ مسترد للعميل",
         pendingHint: "ابعت طلب الاسترداد لقسم الحسابات علشان يبدأوا التنفيذ.",

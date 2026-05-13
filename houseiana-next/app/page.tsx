@@ -15,6 +15,7 @@ import {
   GUEST_TAGS,
   SITE_URL,
   TODAY_STR,
+  HOLD_DURATION_MS,
   type Property,
   type Guest,
   type Booking,
@@ -81,6 +82,16 @@ const PROMO_CODES: Record<string, number> = { WELCOME10: 10, AGENT5: 5, VIP15: 1
 
 function propertyUrl(p: Property) { return `${SITE_URL}/p/${p.id}`; }
 function cleanPhone(phone: string) { return phone.replace(/[^\d]/g, ""); }
+function fmtTimeLeft(ms: number): string {
+  if (ms <= 0) return "0m";
+  const m = Math.floor(ms / 60000);
+  if (m >= 60) {
+    const h = Math.floor(m / 60); const rem = m % 60;
+    return `${h}h ${rem}m`;
+  }
+  if (m >= 1) return `${m}m`;
+  return `${Math.max(1, Math.floor(ms / 1000))}s`;
+}
 function waLink(phone: string, text: string) {
   return `https://wa.me/${cleanPhone(phone)}?text=${encodeURIComponent(text)}`;
 }
@@ -127,6 +138,21 @@ export default function Page() {
   const selectedBooking = bookings.find((b) => b.ref === selectedBookingRef) ?? null;
   const [selectedGuestId, setSelectedGuestId] = useState<string | null>(null);
   const selectedGuest = GUESTS.find((g) => g.id === selectedGuestId) ?? null;
+  // Live clock so hold countdowns tick (re-renders every 30s).
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 30_000);
+    return () => clearInterval(id);
+  }, []);
+  // Helpers shared with drawers/cards
+  function activeHoldFor(propertyId: string): Booking | null {
+    return bookings.find(
+      (b) => b.property.id === propertyId
+        && b.status === "pending"
+        && !!b.holdUntil
+        && new Date(b.holdUntil).getTime() > now
+    ) ?? null;
+  }
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set(["booking"]));
   const [whereDropdown, setWhereDropdown] = useState(false);
   const [rtl, setRtl] = useState(false);
@@ -299,11 +325,31 @@ export default function Page() {
     setBooking((b) => ({ ...b, step: s }));
   }
 
-  function confirmBooking() {
+  function confirmBooking(asPending: boolean = false) {
+    if (!selectedProperty || !booking.guest || !totals) return;
     const ref = "HSI-" + Math.random().toString(36).slice(2, 8).toUpperCase();
+    const newBooking: Booking = {
+      ref,
+      guest: booking.guest,
+      property: selectedProperty,
+      checkin: search.checkin,
+      checkout: search.checkout,
+      nights: search.nights,
+      total: `${selectedProperty.currency} ${totals.total.toLocaleString()}`,
+      totalAmount: totals.total,
+      paidAmount: asPending ? 0 : totals.total,
+      status: asPending ? "pending" : "confirmed",
+      channel: "wa",
+      paymentStatus: asPending ? "pending" : "paid",
+      refundAmount: 0,
+      refundStatus: "none",
+      holdUntil: asPending ? new Date(Date.now() + HOLD_DURATION_MS).toISOString() : null,
+      notes: booking.notes?.trim() || undefined,
+    };
+    setBookings((prev) => [newBooking, ...prev]);
     setConfRef(ref);
     setBooking((b) => ({ ...b, step: 4 }));
-    toast(t.toast.bookingConfirmed);
+    toast(asPending ? t.booking.savedAsPendingToast : t.toast.bookingConfirmed);
   }
 
   function simulateIncomingCall() {
@@ -412,17 +458,22 @@ export default function Page() {
                 </div>
               ) : (
                 <div className="property-grid">
-                  {filtered.map((p) => (
-                    <PropertyCard
-                      key={p.id}
-                      p={p}
-                      isFav={favs.has(p.id)}
-                      onFav={() => toggleFav(p.id)}
-                      onOpen={() => openPropertyDrawer(p)}
-                      t={t}
-                      lang={lang}
-                    />
-                  ))}
+                  {filtered.map((p) => {
+                    const hold = activeHoldFor(p.id);
+                    const holdMsLeft = hold && hold.holdUntil ? Math.max(0, new Date(hold.holdUntil).getTime() - now) : 0;
+                    return (
+                      <PropertyCard
+                        key={p.id}
+                        p={p}
+                        isFav={favs.has(p.id)}
+                        onFav={() => toggleFav(p.id)}
+                        onOpen={() => openPropertyDrawer(p)}
+                        t={t}
+                        lang={lang}
+                        holdMsLeft={holdMsLeft}
+                      />
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -463,7 +514,7 @@ export default function Page() {
         </div>
         <div className="drawer-body">
           {selectedProperty && drawerView === "detail" && (
-            <PropertyDetail p={selectedProperty} nights={Math.max(1, search.nights)} toast={toast} t={t} lang={lang} />
+            <PropertyDetail p={selectedProperty} nights={Math.max(1, search.nights)} toast={toast} t={t} lang={lang} search={search} />
           )}
           {selectedProperty && drawerView === "booking" && (
             <BookingFlow
@@ -514,6 +565,7 @@ export default function Page() {
             t={t}
             lang={lang}
             toast={toast}
+            now={now}
           />
         )}
       </div>
@@ -1068,6 +1120,7 @@ function PropertyCard({
   onOpen,
   t,
   lang,
+  holdMsLeft,
 }: {
   p: Property;
   isFav: boolean;
@@ -1075,6 +1128,7 @@ function PropertyCard({
   onOpen: () => void;
   t: typeof DICT["en"];
   lang: Lang;
+  holdMsLeft: number; // 0 = no hold
 }) {
   const chips: { id: string; label: string }[] = [
     p.amenities.ac ? { id: "ac", label: t.amenities.ac } : null!,
@@ -1084,6 +1138,7 @@ function PropertyCard({
     p.amenities.parking ? { id: "parking", label: t.amenities.parking } : null!,
     p.amenities.gym ? { id: "gym", label: t.amenities.gym } : null!,
   ].filter(Boolean).slice(0, 4);
+  const onHold = holdMsLeft > 0;
 
   return (
     <div className={`property ${p.country}`} onClick={onOpen}>
@@ -1095,6 +1150,14 @@ function PropertyCard({
         >
           <Icon.Heart size={13} />
         </span>
+        {onHold && (
+          <div className="property-hold">
+            <div>
+              <div className="property-hold-badge">⏱ {t.common.onHold}</div>
+              <div className="property-hold-time">{fmtTimeLeft(holdMsLeft)}</div>
+            </div>
+          </div>
+        )}
         {p.instantBook && (
           <span className="property-instant"><Icon.Bolt /> {t.common.instantBook}</span>
         )}
@@ -1132,15 +1195,75 @@ function PropertyCard({
    PROPERTY DETAIL
 ============================================================ */
 function PropertyDetail({
-  p, nights, toast, t, lang,
+  p, nights, toast, t, lang, search,
 }: {
   p: Property; nights: number; toast: (msg: string) => void; t: typeof DICT["en"]; lang: Lang;
+  search: SearchState;
 }) {
   const url = propertyUrl(p);
   const shareText = t.detail.shareMsg(pName(p, lang), pLoc(p, lang), p.currency, p.price.toLocaleString(), url);
   const ownerInitials = p.owner.name.split(" ").map((s) => s[0]).slice(0, 2).join("");
   const ownerFirst = p.owner.name.split(" ")[0];
   const ownerMessage = t.detail.waMsg(ownerFirst, pName(p, lang));
+
+  // ---- Quote dialog state ----
+  const [quoteOpen, setQuoteOpen] = useState(false);
+  const [quoteGuestSearch, setQuoteGuestSearch] = useState("");
+  const [quoteFirstName, setQuoteFirstName] = useState("");
+  const [quotePhone, setQuotePhone] = useState("");
+  const [quoteEmail, setQuoteEmail] = useState("");
+  const quoteRef = useMemo(
+    () => `QTE-${p.id}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`,
+    [p.id, quoteOpen],
+  );
+  const quoteGuestMatches = useMemo(() => {
+    const q = quoteGuestSearch.toLowerCase().trim();
+    if (!q) return [];
+    return GUESTS.filter((g) => `${g.first} ${g.last} ${g.email} ${g.phone} ${g.id}`.toLowerCase().includes(q));
+  }, [quoteGuestSearch]);
+
+  // Quote calculations (same fee structure as booking)
+  const qSubtotal = p.price * nights;
+  const qCleaning = p.fees.cleaning;
+  const qUtilities = p.fees.utilities;
+  const qBookingFee = Math.round((qSubtotal * p.fees.bookingFeePct) / 100);
+  const qTotal = qSubtotal + qCleaning + qUtilities + qBookingFee;
+  const quoteMsg = t.detail.quoteMsg(
+    quoteFirstName || "there",
+    quoteRef,
+    pName(p, lang),
+    pLoc(p, lang),
+    formatDate(search.checkin),
+    formatDate(search.checkout),
+    nights,
+    `${p.currency} ${p.price.toLocaleString()} × ${nights} = ${p.currency} ${qSubtotal.toLocaleString()}`,
+    `${p.currency} ${qCleaning}`,
+    `${p.currency} ${qUtilities}`,
+    `${p.currency} ${qBookingFee.toLocaleString()}`,
+    qTotal.toLocaleString(),
+    p.currency,
+  );
+
+  function pickQuoteGuest(g: Guest) {
+    setQuoteFirstName(g.first);
+    setQuotePhone(g.phone);
+    setQuoteEmail(g.email);
+    setQuoteGuestSearch("");
+  }
+
+  function sendQuoteWA() {
+    if (!quotePhone.trim()) { toast(t.detail.quoteMissingPhone); return; }
+    window.open(waLink(quotePhone, quoteMsg), "_blank", "noopener");
+    toast(t.detail.quoteSentToast);
+    setQuoteOpen(false);
+  }
+  function sendQuoteEmail() {
+    if (!quoteEmail.trim()) return;
+    const subj = `${t.detail.quoteTitle} — ${pShortName(p, lang)} (${quoteRef})`;
+    window.location.href = `mailto:${quoteEmail}?subject=${encodeURIComponent(subj)}&body=${encodeURIComponent(quoteMsg)}`;
+    toast(t.detail.quoteSentToast);
+    setQuoteOpen(false);
+  }
 
   function copyLink() {
     navigator.clipboard.writeText(url).then(
@@ -1238,7 +1361,94 @@ function PropertyDetail({
             {t.detail.shareEmail}
           </a>
         </div>
+        <div style={{ marginTop: 10 }}>
+          <button className="btn btn-primary" style={{ width: "100%" }} onClick={() => setQuoteOpen(true)}>
+            <Icon.Sparkle size={14} /> {t.detail.quoteOpenBtn}
+          </button>
+          <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 6 }}>{t.detail.quoteSubtitle}</div>
+        </div>
       </div>
+
+      {/* QUOTE DIALOG */}
+      {quoteOpen && (
+        <div className="quote-overlay" onClick={(e) => { if (e.target === e.currentTarget) setQuoteOpen(false); }}>
+          <div className="quote-dialog">
+            <div className="quote-dialog-head">
+              <div className="quote-dialog-title">
+                <Icon.Sparkle size={16} /> {t.detail.quoteDialogTitle}
+              </div>
+              <button className="drawer-close" onClick={() => setQuoteOpen(false)}><Icon.X /></button>
+            </div>
+            <div className="quote-dialog-body">
+              <div className="quote-section">
+                <div className="quote-section-title">{t.detail.quoteGuestPicker}</div>
+                <input
+                  type="text"
+                  className="input"
+                  placeholder={t.detail.quoteGuestPickerPlaceholder}
+                  value={quoteGuestSearch}
+                  onChange={(e) => setQuoteGuestSearch(e.target.value)}
+                />
+                {quoteGuestSearch && quoteGuestMatches.length > 0 && (
+                  <div className="quote-guest-pick">
+                    {quoteGuestMatches.map((g) => (
+                      <div key={g.id} className="guest-row" onClick={() => pickQuoteGuest(g)}>
+                        <div className="guest-avatar-sm">{g.first[0]}{g.last[0]}</div>
+                        <div className="guest-row-info">
+                          <div className="guest-row-name">{g.first} {g.last}</div>
+                          <div className="guest-row-meta">{g.phone} · {g.email}</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="quote-or">— {t.detail.quoteOrType} —</div>
+
+              <div className="field-row col-2">
+                <div>
+                  <label className="label">{t.detail.quoteNameLabel}</label>
+                  <input className="input" placeholder={t.detail.quoteNamePlaceholder}
+                    value={quoteFirstName} onChange={(e) => setQuoteFirstName(e.target.value)} />
+                </div>
+                <div>
+                  <label className="label">{t.detail.quotePhoneLabel} <span className="req">*</span></label>
+                  <input className="input" placeholder={t.detail.quotePhonePlaceholder}
+                    value={quotePhone} onChange={(e) => setQuotePhone(e.target.value)} />
+                </div>
+              </div>
+              <div className="field">
+                <label className="label">{t.detail.quoteEmailLabel}</label>
+                <input className="input" placeholder={t.detail.quoteEmailPlaceholder}
+                  value={quoteEmail} onChange={(e) => setQuoteEmail(e.target.value)} />
+              </div>
+
+              <div className="quote-section">
+                <div className="quote-section-title">{t.detail.quotePreviewLabel}</div>
+                <div className="quote-preview">{quoteMsg}</div>
+                <div className="quote-meta">
+                  <span>{t.detail.quoteValidLabel}</span>
+                  <span className="ref">{t.detail.quoteRefLabel}: {quoteRef}</span>
+                </div>
+              </div>
+            </div>
+            <div className="quote-dialog-foot">
+              <button className="btn btn-secondary btn-sm" onClick={() => setQuoteOpen(false)}>{t.detail.quoteCancel}</button>
+              <button
+                className="btn btn-secondary btn-sm"
+                onClick={sendQuoteEmail}
+                disabled={!quoteEmail.trim()}
+              >
+                {t.detail.quoteSendEmail}
+              </button>
+              <button className="btn btn-primary btn-sm" onClick={sendQuoteWA}>
+                <Icon.WhatsApp size={12} /> {t.detail.quoteSendWA}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="pd-section">
         <div className="pd-quickfacts">
@@ -1370,7 +1580,7 @@ function BookingFlow({
   promoCode: string;
   totals: Totals;
   goStep: (s: number) => void;
-  confirmBooking: () => void;
+  confirmBooking: (asPending?: boolean) => void;
   confRef: string;
   closeDrawer: () => void;
   t: typeof DICT["en"];
@@ -1707,13 +1917,20 @@ function BookingFlow({
 
       <div className={`booking-step ${s === 4 ? "active" : ""}`}>
         <div className="conf-wrap">
-          <div className="conf-icon">
-            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-              <polyline points="20 6 9 17 4 12" />
-            </svg>
+          <div className="conf-icon" style={!booking.paymentVerified ? { background: "var(--orange-soft)", color: "var(--orange)" } : undefined}>
+            {booking.paymentVerified ? (
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <polyline points="20 6 9 17 4 12" />
+              </svg>
+            ) : (
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <circle cx="12" cy="12" r="10" />
+                <polyline points="12 6 12 12 16 14" />
+              </svg>
+            )}
           </div>
-          <div className="conf-title">{t.booking.confirmed}</div>
-          <div className="conf-sub">{t.booking.confirmedSub}</div>
+          <div className="conf-title">{booking.paymentVerified ? t.booking.confirmed : t.booking.savedPendingHeadline}</div>
+          <div className="conf-sub">{booking.paymentVerified ? t.booking.confirmedSub : t.booking.savedPendingSub("1h")}</div>
           <div className="conf-ref">{confRef || "HSI-—————"}</div>
           <div className="conf-details">
             {booking.guest && (
@@ -1787,21 +2004,32 @@ function BookingFlow({
       </div>
 
       {s !== 4 && (
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 22px", borderTop: "1px solid var(--line)", background: "#fff", position: "sticky", bottom: 0 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 22px", borderTop: "1px solid var(--line)", background: "#fff", position: "sticky", bottom: 0, gap: 8, flexWrap: "wrap" }}>
           <button className="btn btn-secondary" disabled={s === 1} onClick={() => goStep(s - 1)}>{t.common.back}</button>
           <div style={{ fontSize: 12, color: "var(--muted)" }}>
             {t.common.step} <b>{s}</b> {t.common.of} 4
           </div>
-          <button
-            className="btn btn-primary"
-            disabled={s === 3 && !booking.paymentVerified}
-            onClick={() => {
-              if (s === 3) confirmBooking();
-              else goStep(s + 1);
-            }}
-          >
-            {s === 3 ? t.common.confirmBooking : t.common.next}
-          </button>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            {s === 3 && booking.paymentSent && !booking.paymentVerified && (
+              <button
+                className="btn btn-secondary"
+                onClick={() => confirmBooking(true)}
+                title={t.booking.saveAndHoldBtn}
+              >
+                ⏱ {t.booking.saveAndHoldBtn}
+              </button>
+            )}
+            <button
+              className="btn btn-primary"
+              disabled={s === 3 && !booking.paymentVerified}
+              onClick={() => {
+                if (s === 3) confirmBooking(false);
+                else goStep(s + 1);
+              }}
+            >
+              {s === 3 ? t.common.confirmBooking : t.common.next}
+            </button>
+          </div>
         </div>
       )}
     </>
@@ -2139,7 +2367,7 @@ function freeCancelDeadline(checkin: string, policyText: string): { date: string
 }
 
 function BookingDetailDrawer({
-  booking, setBookings, close, t, lang, toast,
+  booking, setBookings, close, t, lang, toast, now,
 }: {
   booking: Booking;
   setBookings: React.Dispatch<React.SetStateAction<Booking[]>>;
@@ -2147,6 +2375,7 @@ function BookingDetailDrawer({
   t: typeof DICT["en"];
   lang: Lang;
   toast: (msg: string) => void;
+  now: number;
 }) {
   const tBD = t.bookingDetail;
   const tBP = t.bookingsPage;
@@ -2154,6 +2383,32 @@ function BookingDetailDrawer({
   const g = booking.guest;
   const tier = tierOf(g);
   const urgency = urgencyOf(booking, TODAY_STR);
+
+  // hold info
+  const holdActive = booking.status === "pending" && !!booking.holdUntil && new Date(booking.holdUntil).getTime() > now;
+  const holdExpired = booking.status === "pending" && !!booking.holdUntil && new Date(booking.holdUntil).getTime() <= now;
+  const holdMsLeft = booking.holdUntil ? Math.max(0, new Date(booking.holdUntil).getTime() - now) : 0;
+
+  function confirmPaymentReceived() {
+    setBookings((prev) =>
+      prev.map((b) =>
+        b.ref === booking.ref
+          ? { ...b, status: "confirmed" as const, paymentStatus: "paid" as const, paidAmount: b.totalAmount, holdUntil: null }
+          : b
+      )
+    );
+    toast(tBD.hold.confirmedToast);
+  }
+  function releaseHold() {
+    setBookings((prev) =>
+      prev.map((b) =>
+        b.ref === booking.ref
+          ? { ...b, holdUntil: null }
+          : b
+      )
+    );
+    toast(tBD.hold.releasedToast);
+  }
 
   // edit state
   const [editMode, setEditMode] = useState(false);
@@ -2321,6 +2576,35 @@ function BookingDetailDrawer({
       )}
 
       <div className="drawer-body">
+        {(holdActive || holdExpired) && (
+          <div className="bd-section" style={{ borderBottom: 0, paddingBottom: 0 }}>
+            <div className={`hold-banner ${holdExpired ? "expired" : ""}`}>
+              <div className="hold-banner-icon">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                  <circle cx="12" cy="12" r="10" />
+                  <polyline points="12 6 12 12 16 14" />
+                </svg>
+              </div>
+              <div className="hold-banner-body">
+                <div className="hold-banner-title">{tBD.hold.heading}</div>
+                <div className="hold-banner-text">{holdActive ? tBD.hold.activeHint : tBD.hold.expiredHint}</div>
+                <div className="hold-timer">
+                  <span className="hold-timer-lbl">{tBD.hold.timeLeftLabel}</span>
+                  <span className="hold-timer-val">{holdActive ? fmtTimeLeft(holdMsLeft) : tBD.hold.expiredLabel}</span>
+                </div>
+                <div className="hold-banner-actions">
+                  <button className="btn btn-primary btn-sm" onClick={confirmPaymentReceived}>
+                    ✓ {tBD.hold.confirmPaymentBtn}
+                  </button>
+                  <button className="btn btn-secondary btn-sm" onClick={releaseHold}>
+                    {tBD.hold.releaseHoldBtn}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* STAY */}
         <div className="bd-section">
           <h4><Icon.Calendar size={13} /> {tBD.sections.stay}</h4>
