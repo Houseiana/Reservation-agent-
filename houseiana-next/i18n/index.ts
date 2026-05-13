@@ -229,6 +229,67 @@ interface Dict {
     tags: { repeat: string; vip: string; new: string };
     lastStays: Record<string, string>;
   };
+  bookingDetail: {
+    title: string;
+    refLabel: string;
+    sections: { stay: string; guest: string; property: string; owner: string; payment: string; policy: string; notes: string };
+    toolbar: { edit: string; doneEdit: string; shareGuest: string; shareOwner: string; cancel: string };
+    stay: {
+      checkin: string; checkout: string; nights: string; guests: string;
+      after: string; before: string; minStay: string;
+    };
+    guest: {
+      tierLine: (tier: string, count: number) => string;
+      callBtn: string; waBtn: string;
+      emailLabel: string; phoneLabel: string; natLabel: string; ltvLabel: string;
+    };
+    property: {
+      typeLine: (type: string, br: number, ba: number, area: number) => string;
+      capacityLine: (cap: number) => string;
+      perNight: string;
+      viewOnSite: string;
+      idLabel: string;
+    };
+    owner: {
+      callBtn: string;
+      waBtn: string;
+      responseLabel: string;
+    };
+    payment: {
+      subtotal: string; cleaning: string; utilities: string; bookingFee: string;
+      total: string; paid: string; balance: string;
+      channel: string;
+      paymentStatus: string;
+    };
+    policy: {
+      cancelPolicy: string;
+      freeCancelUntil: string;
+      freeCancelOk: string;
+      freeCancelPast: string;
+      nonRefundable: string;
+    };
+    notes: { existingLabel: string; addLabel: string; addPlaceholder: string; saveBtn: string; noneYet: string; addedToast: string };
+    edit: {
+      hint: string; firstNameLabel: string; lastNameLabel: string;
+      checkinLabel: string; checkoutLabel: string;
+      saveBtn: string; discardBtn: string; savedToast: string;
+    };
+    cancelDialog: {
+      title: string;
+      freeWindowHeadline: string;
+      freeWindowBody: (amount: string) => string;
+      lateWindowHeadline: string;
+      lateWindowBody: (amount: string) => string;
+      cancelledHeadline: string;
+      noRefund: string;
+      confirmBtn: string;
+      keepBtn: string;
+      cancelledToast: string;
+    };
+    closeBtn: string;
+    waCancelGuestMsg: (first: string, ref: string, name: string, refundAmount: string, currency: string, refundNote: string) => string;
+    waCancelOwnerMsg: (ownerFirst: string, ref: string, name: string, checkin: string, checkout: string, guestName: string) => string;
+  };
   kpis: {
     title: string;
     subtitle: string;
@@ -502,6 +563,75 @@ export const DICT: Record<Lang, Dict> = {
       tags: { repeat: "Repeat", vip: "VIP", new: "New" },
       lastStays: { "G-1042": "2 weeks ago", "G-2018": "3 days ago", "G-0892": "last month", "G-1577": "5 days ago", "G-2204": "2 months ago", "G-0331": "today" },
     },
+    bookingDetail: {
+      title: "Booking details",
+      refLabel: "Reference",
+      sections: { stay: "Stay", guest: "Guest", property: "Property", owner: "Property owner", payment: "Payment", policy: "Cancellation policy", notes: "Notes" },
+      toolbar: { edit: "Edit", doneEdit: "Done editing", shareGuest: "Send to guest", shareOwner: "Send to owner", cancel: "Cancel booking" },
+      stay: {
+        checkin: "Check-in", checkout: "Check-out", nights: "Nights", guests: "Guests",
+        after: "after", before: "before", minStay: "Minimum stay",
+      },
+      guest: {
+        tierLine: (tier, count) => `${tier} · ${count} bookings`,
+        callBtn: "Call", waBtn: "WhatsApp",
+        emailLabel: "Email", phoneLabel: "Phone", natLabel: "Nationality", ltvLabel: "Lifetime value",
+      },
+      property: {
+        typeLine: (type, br, ba, area) => `${type} · ${br} BR · ${ba} BA · ${area} m²`,
+        capacityLine: (cap) => `Up to ${cap} guests`,
+        perNight: "per night",
+        viewOnSite: "View on website ↗",
+        idLabel: "Property ID",
+      },
+      owner: {
+        callBtn: "Call owner",
+        waBtn: "WhatsApp owner",
+        responseLabel: "Usual response",
+      },
+      payment: {
+        subtotal: "Subtotal",
+        cleaning: "Cleaning fee",
+        utilities: "Utilities",
+        bookingFee: "Booking fee (10%)",
+        total: "Total",
+        paid: "Paid",
+        balance: "Balance due",
+        channel: "Booking channel",
+        paymentStatus: "Payment status",
+      },
+      policy: {
+        cancelPolicy: "Policy",
+        freeCancelUntil: "Free cancellation until",
+        freeCancelOk: "✓ Within free-cancellation window — full refund available",
+        freeCancelPast: "✗ Past the free-cancellation window — partial or no refund applies",
+        nonRefundable: "✗ Non-refundable — no free-cancellation window for this booking",
+      },
+      notes: { existingLabel: "Current notes", addLabel: "Add a note", addPlaceholder: "Note about this booking…", saveBtn: "Save note", noneYet: "No notes yet.", addedToast: "Note added" },
+      edit: {
+        hint: "Editing booking — change dates or guest name, then Save.",
+        firstNameLabel: "Guest first name", lastNameLabel: "Guest last name",
+        checkinLabel: "Check-in", checkoutLabel: "Check-out",
+        saveBtn: "Save changes", discardBtn: "Discard changes", savedToast: "Booking updated",
+      },
+      cancelDialog: {
+        title: "Cancel this booking?",
+        freeWindowHeadline: "Within free-cancellation window",
+        freeWindowBody: (amount) => `A full refund of ${amount} will be issued to the guest. The owner will be notified.`,
+        lateWindowHeadline: "Past the free-cancellation window",
+        lateWindowBody: (amount) => `Only ${amount} can be refunded per the cancellation policy. The guest and owner will be notified.`,
+        cancelledHeadline: "Already cancelled",
+        noRefund: "This booking is past any refund window. No refund will be issued.",
+        confirmBtn: "Confirm cancellation",
+        keepBtn: "Keep booking",
+        cancelledToast: "Booking cancelled",
+      },
+      closeBtn: "Close",
+      waCancelGuestMsg: (first, ref, name, refundAmount, currency, refundNote) =>
+        `Hi ${first}, your booking ${ref} for "${name}" has been cancelled.\n\nRefund: ${currency} ${refundAmount}${refundNote ? `\n${refundNote}` : ""}\n\nIf there's anything we can do to help, please reply to this message. — Houseiana`,
+      waCancelOwnerMsg: (ownerFirst, ref, name, checkin, checkout, guestName) =>
+        `Hi ${ownerFirst}, the booking on "${name}" (${ref}) has been cancelled.\n\nDates: ${checkin} → ${checkout}\nGuest: ${guestName}\n\nThe unit is now available again for those dates. — Houseiana`,
+    },
     kpis: {
       title: "My Performance", subtitle: "Sara Al-Mansoori · Sr. Booking Agent",
       periods: { mtd: "This month", last: "Last 30 days", qtd: "This quarter", ytd: "Year to date", all: "All time" },
@@ -746,6 +876,75 @@ export const DICT: Record<Lang, Dict> = {
       headers: { guest: "العميل", contact: "وسيلة التواصل", nationality: "الجنسية", bookings: "الحجوزات", ltv: "قيمة العميل", lastStay: "آخر إقامة", tags: "وسوم" },
       tags: { repeat: "متكرر", vip: "VIP", new: "جديد" },
       lastStays: { "G-1042": "منذ أسبوعين", "G-2018": "منذ 3 أيام", "G-0892": "الشهر الماضي", "G-1577": "منذ 5 أيام", "G-2204": "منذ شهرين", "G-0331": "اليوم" },
+    },
+    bookingDetail: {
+      title: "تفاصيل الحجز",
+      refLabel: "المرجع",
+      sections: { stay: "الإقامة", guest: "العميل", property: "العقار", owner: "مالك العقار", payment: "الدفع", policy: "سياسة الإلغاء", notes: "ملاحظات" },
+      toolbar: { edit: "تعديل", doneEdit: "تم التعديل", shareGuest: "إرسال للعميل", shareOwner: "إرسال للمالك", cancel: "إلغاء الحجز" },
+      stay: {
+        checkin: "الوصول", checkout: "المغادرة", nights: "الليالي", guests: "الضيوف",
+        after: "بعد", before: "قبل", minStay: "أقل مدة إقامة",
+      },
+      guest: {
+        tierLine: (tier, count) => `${tier} · ${count} حجز`,
+        callBtn: "اتصال", waBtn: "واتساب",
+        emailLabel: "البريد", phoneLabel: "التليفون", natLabel: "الجنسية", ltvLabel: "قيمة العميل",
+      },
+      property: {
+        typeLine: (type, br, ba, area) => `${type} · ${br} غرفة · ${ba} حمام · ${area} م²`,
+        capacityLine: (cap) => `حتى ${cap} ضيف`,
+        perNight: "لكل ليلة",
+        viewOnSite: "↗ عرض على الموقع",
+        idLabel: "كود العقار",
+      },
+      owner: {
+        callBtn: "اتصل بالمالك",
+        waBtn: "واتساب المالك",
+        responseLabel: "متوسط الرد",
+      },
+      payment: {
+        subtotal: "الإجمالي قبل الرسوم",
+        cleaning: "رسوم نظافة",
+        utilities: "مرافق",
+        bookingFee: "مصاريف حجز (10%)",
+        total: "الإجمالي",
+        paid: "المدفوع",
+        balance: "المتبقي",
+        channel: "قناة الحجز",
+        paymentStatus: "حالة الدفع",
+      },
+      policy: {
+        cancelPolicy: "السياسة",
+        freeCancelUntil: "إلغاء مجاني حتى",
+        freeCancelOk: "✓ ضمن فترة الإلغاء المجاني — استرداد كامل ممكن",
+        freeCancelPast: "✗ بعد فترة الإلغاء المجاني — استرداد جزئي أو لا يوجد",
+        nonRefundable: "✗ غير قابل للاسترداد — لا توجد فترة إلغاء مجاني لهذا الحجز",
+      },
+      notes: { existingLabel: "الملاحظات الحالية", addLabel: "إضافة ملاحظة", addPlaceholder: "ملاحظة عن هذا الحجز…", saveBtn: "حفظ الملاحظة", noneYet: "لا توجد ملاحظات.", addedToast: "تمت إضافة الملاحظة" },
+      edit: {
+        hint: "تعديل الحجز — غيّر التواريخ أو اسم العميل، ثم احفظ.",
+        firstNameLabel: "الاسم الأول للعميل", lastNameLabel: "اسم العائلة",
+        checkinLabel: "تاريخ الوصول", checkoutLabel: "تاريخ المغادرة",
+        saveBtn: "حفظ التعديلات", discardBtn: "إلغاء التعديل", savedToast: "تم تحديث الحجز",
+      },
+      cancelDialog: {
+        title: "تأكيد إلغاء الحجز؟",
+        freeWindowHeadline: "ضمن فترة الإلغاء المجاني",
+        freeWindowBody: (amount) => `سيتم استرداد كامل المبلغ ${amount} للعميل، وسيتم إخطار المالك بالإلغاء.`,
+        lateWindowHeadline: "بعد فترة الإلغاء المجاني",
+        lateWindowBody: (amount) => `سيتم استرداد ${amount} فقط حسب سياسة الإلغاء. سيتم إخطار العميل والمالك.`,
+        cancelledHeadline: "الحجز ملغى بالفعل",
+        noRefund: "هذا الحجز خارج فترة الاسترداد. لن يتم استرداد أي مبلغ.",
+        confirmBtn: "تأكيد الإلغاء",
+        keepBtn: "الاحتفاظ بالحجز",
+        cancelledToast: "تم إلغاء الحجز",
+      },
+      closeBtn: "إغلاق",
+      waCancelGuestMsg: (first, ref, name, refundAmount, currency, refundNote) =>
+        `أهلاً ${first}، تم إلغاء حجزك ${ref} لـ "${name}".\n\nمبلغ الاسترداد: ${refundAmount} ${currency}${refundNote ? `\n${refundNote}` : ""}\n\nلو في أي حاجة نقدر نساعدك فيها، رد على الرسالة. — Houseiana`,
+      waCancelOwnerMsg: (ownerFirst, ref, name, checkin, checkout, guestName) =>
+        `أهلاً ${ownerFirst}، تم إلغاء الحجز على "${name}" (${ref}).\n\nالتواريخ: ${checkin} → ${checkout}\nالعميل: ${guestName}\n\nالوحدة أصبحت متاحة مرة أخرى لهذه التواريخ. — Houseiana`,
     },
     kpis: {
       title: "أدائي", subtitle: "سارة المنصوري · كبير موظفي الحجز",
