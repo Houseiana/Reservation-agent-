@@ -2471,16 +2471,27 @@ function BookingDetailDrawer({
   }
 
   function confirmCancel() {
-    // mark booking as cancelled and record refund owed (status: none = not yet requested from Accounts)
+    // mark booking as cancelled. If a refund is owed, auto-send the refund
+    // request to the Accounts team in the same step (refundStatus = "requested").
+    const willRefund = refundIfCancelled > 0;
     setBookings((prev) =>
       prev.map((b) =>
         b.ref === booking.ref
-          ? { ...b, status: "cancelled" as const, refundAmount: refundIfCancelled, refundStatus: "none" as const }
+          ? {
+              ...b,
+              status: "cancelled" as const,
+              refundAmount: refundIfCancelled,
+              refundStatus: willRefund ? ("requested" as const) : ("none" as const),
+            }
           : b
       )
     );
     setCancelDialog(false);
-    toast(tBD.cancelDialog.cancelledToast);
+    toast(
+      willRefund
+        ? tBD.cancelDialog.cancelledWithRefundToast(`${p.currency} ${refundIfCancelled.toLocaleString()}`)
+        : tBD.cancelDialog.cancelledToast
+    );
   }
 
   // share messages — reuse existing templates
@@ -2877,6 +2888,11 @@ function BookingDetailDrawer({
               <>
                 <div className="bd-cancel-headline ok">{tBD.cancelDialog.freeWindowHeadline}</div>
                 <div className="bd-cancel-body">{tBD.cancelDialog.freeWindowBody(`${p.currency} ${refundIfCancelled.toLocaleString()}`)}</div>
+                {refundIfCancelled > 0 && (
+                  <div style={{ fontSize: 11.5, color: "var(--green)", fontWeight: 500, marginTop: -8, marginBottom: 14 }}>
+                    {tBD.cancelDialog.autoRequestNote}
+                  </div>
+                )}
               </>
             ) : (
               <>
@@ -2886,6 +2902,11 @@ function BookingDetailDrawer({
                     ? tBD.cancelDialog.lateWindowBody(`${p.currency} ${refundIfCancelled.toLocaleString()}`)
                     : tBD.cancelDialog.noRefund}
                 </div>
+                {refundIfCancelled > 0 && (
+                  <div style={{ fontSize: 11.5, color: "var(--orange)", fontWeight: 500, marginTop: -8, marginBottom: 14 }}>
+                    {tBD.cancelDialog.autoRequestNote}
+                  </div>
+                )}
               </>
             )}
             <div className="bd-cancel-actions">

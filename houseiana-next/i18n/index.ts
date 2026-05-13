@@ -328,6 +328,8 @@ interface Dict {
       confirmBtn: string;
       keepBtn: string;
       cancelledToast: string;
+      cancelledWithRefundToast: (amount: string) => string;
+      autoRequestNote: string;
     };
     closeBtn: string;
     waCancelGuestMsg: (first: string, ref: string, name: string, refundAmount: string, currency: string, refundNote: string) => string;
@@ -733,14 +735,16 @@ export const DICT: Record<Lang, Dict> = {
       cancelDialog: {
         title: "Cancel this booking?",
         freeWindowHeadline: "Within free-cancellation window",
-        freeWindowBody: (amount) => `A full refund of ${amount} will be issued to the guest. The owner will be notified.`,
+        freeWindowBody: (amount) => `A full refund of ${amount} will be issued to the guest. A refund request will be sent to the Accounts team automatically. The owner will also be notified.`,
         lateWindowHeadline: "Past the free-cancellation window",
-        lateWindowBody: (amount) => `Only ${amount} can be refunded per the cancellation policy. The guest and owner will be notified.`,
+        lateWindowBody: (amount) => `Only ${amount} will be refunded per the cancellation policy. A refund request will be sent to the Accounts team automatically. The guest and owner will be notified.`,
         cancelledHeadline: "Already cancelled",
         noRefund: "This booking is past any refund window. No refund will be issued.",
         confirmBtn: "Confirm cancellation",
         keepBtn: "Keep booking",
         cancelledToast: "Booking cancelled",
+        cancelledWithRefundToast: (amount) => `Booking cancelled — refund request of ${amount} sent to Accounts`,
+        autoRequestNote: "↳ Refund request will be sent to Accounts automatically",
       },
       closeBtn: "Close",
       waCancelGuestMsg: (first, ref, name, refundAmount, currency, refundNote) =>
@@ -1118,14 +1122,16 @@ export const DICT: Record<Lang, Dict> = {
       cancelDialog: {
         title: "تأكيد إلغاء الحجز؟",
         freeWindowHeadline: "ضمن فترة الإلغاء المجاني",
-        freeWindowBody: (amount) => `سيتم استرداد كامل المبلغ ${amount} للعميل، وسيتم إخطار المالك بالإلغاء.`,
+        freeWindowBody: (amount) => `سيتم استرداد كامل المبلغ ${amount} للعميل. سيتم إرسال طلب الاسترداد لقسم الحسابات تلقائياً، وسيتم إخطار المالك.`,
         lateWindowHeadline: "بعد فترة الإلغاء المجاني",
-        lateWindowBody: (amount) => `سيتم استرداد ${amount} فقط حسب سياسة الإلغاء. سيتم إخطار العميل والمالك.`,
+        lateWindowBody: (amount) => `سيتم استرداد ${amount} فقط حسب سياسة الإلغاء. سيتم إرسال طلب الاسترداد لقسم الحسابات تلقائياً، وسيتم إخطار العميل والمالك.`,
         cancelledHeadline: "الحجز ملغى بالفعل",
         noRefund: "هذا الحجز خارج فترة الاسترداد. لن يتم استرداد أي مبلغ.",
         confirmBtn: "تأكيد الإلغاء",
         keepBtn: "الاحتفاظ بالحجز",
         cancelledToast: "تم إلغاء الحجز",
+        cancelledWithRefundToast: (amount) => `تم إلغاء الحجز — تم إرسال طلب استرداد ${amount} لقسم الحسابات`,
+        autoRequestNote: "↳ سيتم إرسال طلب الاسترداد للحسابات تلقائياً",
       },
       closeBtn: "إغلاق",
       waCancelGuestMsg: (first, ref, name, refundAmount, currency, refundNote) =>
