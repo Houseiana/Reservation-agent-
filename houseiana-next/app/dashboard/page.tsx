@@ -3239,7 +3239,7 @@ function GuestsPage({
         <div className="stat-card sm"><div className="stat-card-label">{t.guestsPage.stats.avgLtv}</div><div className="stat-card-value sm">EGP 62,400</div><div className="stat-card-meta"><span className="trend up">↑ 8%</span></div></div>
         <div className="stat-card sm"><div className="stat-card-label">{t.guestsPage.stats.vip}</div><div className="stat-card-value sm">84</div><div className="stat-card-meta"><span style={{ color: "var(--muted)" }}>{t.guestsPage.stats.vipNote}</span></div></div>
       </div>
-      <div style={{ background: "#fff", border: "1px solid var(--line)", borderRadius: 14, overflow: "hidden" }}>
+      <div style={{ background: "#fff", border: "1px solid var(--line)", borderRadius: 14}}>
         <table style={{ width: "100%", borderCollapse: "collapse" }}>
           <thead>
             <tr style={{ background: "var(--ghost)" }}>

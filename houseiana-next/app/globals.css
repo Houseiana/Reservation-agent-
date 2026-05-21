@@ -707,7 +707,13 @@ input[type=range]::-webkit-slider-thumb{
 .bk-pill.active .count{background:rgba(255,255,255,.18);color:#fff}
 
 .bk-table{
-  background:#fff;border:1px solid var(--line);border-radius:14px;overflow:hidden;
+  background:#fff;
+  border:1px solid var(--line);
+  border-radius:14px;
+  -webkit-border-radius:14px;
+  -moz-border-radius:14px;
+  -ms-border-radius:14px;
+  -o-border-radius:14px;
 }
 .bk-table table{width:100%;border-collapse:collapse}
 .bk-table th{
