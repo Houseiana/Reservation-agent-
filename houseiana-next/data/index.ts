@@ -66,6 +66,8 @@ export interface Guest {
   nat: string;
   bookings: number;
   ltv: string;
+  /** ISO date — last stay check-in, when known. */
+  lastStay?: string;
   isNew?: boolean;
 }
 
