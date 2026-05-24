@@ -1,7 +1,6 @@
-import { api, USE_MOCK } from "../client";
+import { api } from "../client";
 import { ENDPOINTS } from "../endpoints";
 import type { Guest } from "../types";
-import { GUESTS } from "@/data";
 
 /**
  * Backend user row from GET /api/reservation-agent/users.
@@ -35,12 +34,6 @@ export interface CreateUserInput {
  */
 export async function searchUsers(query: string, signal?: AbortSignal): Promise<Guest[]> {
   if (!query.trim()) return [];
-  if (USE_MOCK) {
-    const q = query.toLowerCase().trim();
-    return GUESTS.filter((g) =>
-      `${g.first} ${g.last} ${g.email} ${g.phone} ${g.id}`.toLowerCase().includes(q),
-    );
-  }
   const raw = await api.get<unknown>(ENDPOINTS.users.search, {
     query: { query },
     signal,
@@ -54,19 +47,6 @@ export async function searchUsers(query: string, signal?: AbortSignal): Promise<
  * immediately use it as the selected guest.
  */
 export async function createUser(input: CreateUserInput): Promise<Guest> {
-  if (USE_MOCK) {
-    return {
-      id: "G-" + Math.random().toString(36).slice(2, 7).toUpperCase(),
-      first: input.firstName,
-      last: input.lastName,
-      email: input.email,
-      phone: input.phone,
-      nat: input.countryCode || "—",
-      bookings: 0,
-      ltv: "—",
-      isNew: true,
-    };
-  }
   const raw = await api.post<unknown>(
     ENDPOINTS.users.create,
     input as unknown as Record<string, unknown>,

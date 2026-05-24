@@ -1,7 +1,6 @@
-import { api, USE_MOCK } from "../client";
+import { api } from "../client";
 import { ENDPOINTS } from "../endpoints";
 import type { Paginated, Property } from "../types";
-import { PROPERTIES } from "@/data";
 
 /**
  * Query params for /api/reservation-agent/property-search.
@@ -31,9 +30,6 @@ export async function listProperties(
   params: PropertySearchParams = {},
   signal?: AbortSignal,
 ): Promise<Paginated<Property>> {
-  if (USE_MOCK) {
-    return mockPage(PROPERTIES, params);
-  }
   const raw = await api.get<unknown>(ENDPOINTS.properties.list, {
     query: flattenQuery(params),
     signal,
@@ -51,11 +47,6 @@ export async function getProperty(
   params: PropertyDetailParams = {},
   signal?: AbortSignal,
 ): Promise<Property> {
-  if (USE_MOCK) {
-    const found = PROPERTIES.find((p) => p.id === id);
-    if (!found) throw new Error(`Property ${id} not found in mock data`);
-    return found;
-  }
   const raw = await api.get<unknown>(ENDPOINTS.properties.detail(id), {
     query: { checkin: params.checkin, checkout: params.checkout },
     signal,
@@ -194,15 +185,7 @@ function mapProperty(raw: unknown): Property {
     Object.assign(amenities, r.amenities as Record<string, boolean>);
   }
 
-  const photos = Array.isArray(r.photos)
-    ? (r.photos as unknown[]).filter((x): x is string => typeof x === "string" && x.length > 0)
-    : [];
-  // The list endpoint returns a single `coverPhoto` string instead of a
-  // full gallery. Promote it to photos[0] so PropertyCard can render an
-  // image without a second request.
-  if (photos.length === 0 && typeof r.coverPhoto === "string" && r.coverPhoto.length > 0) {
-    photos.push(r.coverPhoto);
-  }
+  const photos = extractPhotos(r);
 
   return {
     id,
@@ -238,19 +221,99 @@ function mapProperty(raw: unknown): Property {
       minNights: 1,
       cancel: "—",
     },
-    owner: (r.owner as Property["owner"]) ?? {
-      name: "—",
-      phone: "",
-      whatsapp: "",
-      responseTime: "—",
-    },
+    owner: extractOwner(r),
     photos,
   };
 }
 
-function mockPage<T>(all: T[], params: PropertySearchParams): Paginated<T> {
-  const page = params.page ?? 1;
-  const pageSize = params.limit ?? all.length;
-  const start = (page - 1) * pageSize;
-  return { items: all.slice(start, start + pageSize), total: all.length, page, pageSize };
+/**
+ * Pull the image URLs out of a property payload. Backends vary on the
+ * field name (coverPhoto / cover_photo / thumbnail / image / imageUrl)
+ * and shape (plain string vs `{ url }` object vs array of either). The
+ * list endpoint typically returns a single cover image; the detail
+ * endpoint returns a full gallery.
+ */
+function extractPhotos(r: Record<string, unknown>): string[] {
+  const toUrl = (v: unknown): string | null => {
+    if (typeof v === "string" && v.trim()) return v.trim();
+    if (v && typeof v === "object") {
+      const obj = v as Record<string, unknown>;
+      for (const k of ["url", "src", "href", "path", "uri"]) {
+        const inner = obj[k];
+        if (typeof inner === "string" && inner.trim()) return inner.trim();
+      }
+    }
+    return null;
+  };
+
+  const collect = (input: unknown): string[] => {
+    if (!input) return [];
+    if (Array.isArray(input)) {
+      return input.map(toUrl).filter((x): x is string => x !== null);
+    }
+    const one = toUrl(input);
+    return one ? [one] : [];
+  };
+
+  // Try the most specific gallery field first, then fall back through
+  // common single-cover names. Anything found at the first matching key
+  // wins — later fields aren't merged in (avoids duplicates).
+  const galleryKeys = ["photos", "images", "gallery", "media"];
+  for (const k of galleryKeys) {
+    const urls = collect(r[k]);
+    if (urls.length) return urls;
+  }
+  const coverKeys = ["coverPhoto", "cover_photo", "coverImage", "cover_image", "thumbnailUrl", "thumbnail", "imageUrl", "image", "mainImage", "picture"];
+  for (const k of coverKeys) {
+    const urls = collect(r[k]);
+    if (urls.length) return urls;
+  }
+  return [];
+}
+
+/**
+ * Pull the host/owner contact info out of a property payload. Backends
+ * vary a lot here — try a nested object first ({owner|host|landlord}),
+ * then fall back to flat hostName/ownerPhone/etc. fields on the property
+ * itself. Phone gets the country-code prefix when both pieces are
+ * returned separately.
+ */
+function extractOwner(r: Record<string, unknown>): Property["owner"] {
+  const nested =
+    (r.owner && typeof r.owner === "object" ? (r.owner as Record<string, unknown>) : null) ??
+    (r.host && typeof r.host === "object" ? (r.host as Record<string, unknown>) : null) ??
+    (r.landlord && typeof r.landlord === "object" ? (r.landlord as Record<string, unknown>) : null);
+
+  const src = nested ?? r;
+  const pick = (...keys: string[]): string => {
+    for (const k of keys) {
+      const v = src[k];
+      if (typeof v === "string" && v.trim()) return v.trim();
+    }
+    return "";
+  };
+
+  const first = pick("firstName", "givenName");
+  const last = pick("lastName", "familyName", "surname");
+  const fullName =
+    pick("name", "fullName", "displayName", "hostName", "ownerName") ||
+    [first, last].filter(Boolean).join(" ") ||
+    "—";
+
+  const countryCode = pick("countryCode", "phoneCountryCode", "hostCountryCode");
+  const rawPhone = pick("phone", "phoneNumber", "mobile", "hostPhone", "ownerPhone");
+  const phone = countryCode && rawPhone && !rawPhone.startsWith("+")
+    ? `+${countryCode.replace(/[^\d]/g, "")}${rawPhone}`
+    : rawPhone;
+
+  const whatsapp = pick("whatsapp", "whatsappNumber", "wa", "waNumber") || phone;
+  const email = pick("email", "hostEmail", "ownerEmail");
+
+  return {
+    name: fullName,
+    phone,
+    whatsapp,
+    responseTime: pick("responseTime", "averageResponseTime") || "—",
+    email: email || undefined,
+  };
 }

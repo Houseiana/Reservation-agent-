@@ -1,7 +1,6 @@
-import { api, USE_MOCK } from "../client";
+import { api } from "../client";
 import { ENDPOINTS } from "../endpoints";
 import type { Booking, Guest, Property, Paginated } from "../types";
-import { BOOKINGS, HOLD_DURATION_MS } from "@/data";
 
 export interface BookingListParams {
   /** Integer ID from /api/reservation-agent-lookup/booking-statuses. */
@@ -59,9 +58,6 @@ export async function listBookings(
   params: BookingListParams = {},
   signal?: AbortSignal,
 ): Promise<Paginated<Booking>> {
-  if (USE_MOCK) {
-    return paginate(BOOKINGS, params);
-  }
   const raw = await api.get<unknown>(ENDPOINTS.bookings.list, {
     query: {
       status: params.status,
@@ -74,11 +70,6 @@ export async function listBookings(
 }
 
 export async function getBooking(ref: string, signal?: AbortSignal): Promise<Booking> {
-  if (USE_MOCK) {
-    const b = BOOKINGS.find((x) => x.ref === ref);
-    if (!b) throw new Error(`Booking ${ref} not found in mock data`);
-    return b;
-  }
   const raw = await api.get<unknown>(ENDPOINTS.bookings.detail(ref), { signal });
   return mapBooking(raw);
 }
@@ -90,8 +81,8 @@ export async function quoteBooking(input: BookingQuoteInput): Promise<BookingQuo
 /**
  * Create a confirmed booking via POST /api/reservation-agent/bookings.
  * Server payload shape matches the API contract exactly. The optional
- * `property` / `guest` / `total` are used only when USE_MOCK to hydrate
- * the returned Booking; the real backend returns a populated object.
+ * `property` / `guest` / `total` hydrate the returned Booking when the
+ * backend response only carries an id/ref.
  */
 export async function createBooking(args: {
   input: BookingCreateInput;
@@ -101,37 +92,6 @@ export async function createBooking(args: {
   totalDisplay?: string;
   pending?: boolean;
 }): Promise<Booking> {
-  if (USE_MOCK) {
-    const { input, property, guest, total = 0, totalDisplay = "—", pending } = args;
-    if (!property || !guest) {
-      throw new Error("Mock createBooking requires hydrated property + guest");
-    }
-    const nights = Math.max(
-      1,
-      Math.round(
-        (new Date(input.checkOut).getTime() - new Date(input.checkIn).getTime()) / 86_400_000,
-      ),
-    );
-    const mockRef = "HSI-" + Math.random().toString(36).slice(2, 8).toUpperCase();
-    return {
-      id: mockRef,
-      ref: mockRef,
-      guest,
-      property,
-      checkin: toDateOnly(input.checkIn),
-      checkout: toDateOnly(input.checkOut),
-      nights,
-      total: totalDisplay,
-      totalAmount: total,
-      paidAmount: pending ? 0 : total,
-      status: pending ? "pending" : "confirmed",
-      channel: "wa",
-      paymentStatus: pending ? "pending" : "paid",
-      refundAmount: 0,
-      refundStatus: "none",
-      holdUntil: pending ? new Date(Date.now() + HOLD_DURATION_MS).toISOString() : null,
-    };
-  }
   const raw = await api.post<unknown>(
     ENDPOINTS.bookings.create,
     args.input as unknown as Record<string, unknown>,
@@ -173,30 +133,6 @@ export async function confirmBooking(args: {
   total?: number;
   totalDisplay?: string;
 }): Promise<Booking> {
-  if (USE_MOCK) {
-    const { input, property, guest, total = 0, totalDisplay = "—" } = args;
-    if (!property || !guest) {
-      throw new Error("Mock confirmBooking requires hydrated property + guest");
-    }
-    return {
-      id: input.bookingId,
-      ref: "HSI-" + Math.random().toString(36).slice(2, 8).toUpperCase(),
-      guest,
-      property,
-      checkin: "",
-      checkout: "",
-      nights: 1,
-      total: totalDisplay,
-      totalAmount: total,
-      paidAmount: total,
-      status: "confirmed",
-      channel: "wa",
-      paymentStatus: "paid",
-      refundAmount: 0,
-      refundStatus: "none",
-      holdUntil: null,
-    };
-  }
   const raw = await api.post<unknown>(
     ENDPOINTS.bookings.confirm,
     args.input as unknown as Record<string, unknown>,
@@ -215,15 +151,6 @@ export async function confirmBooking(args: {
 }
 
 export async function cancelBooking(ref: string, input: CancelInput): Promise<Booking> {
-  if (USE_MOCK) {
-    const b = await getBooking(ref);
-    return {
-      ...b,
-      status: "cancelled",
-      refundAmount: input.refundAmount,
-      refundStatus: input.refundAmount > 0 ? "requested" : "none",
-    };
-  }
   const raw = await api.post<unknown>(
     ENDPOINTS.bookings.cancel(ref),
     input as unknown as Record<string, unknown>,
@@ -232,10 +159,6 @@ export async function cancelBooking(ref: string, input: CancelInput): Promise<Bo
 }
 
 export async function updateBookingNotes(ref: string, notes: string): Promise<Booking> {
-  if (USE_MOCK) {
-    const b = await getBooking(ref);
-    return { ...b, notes: notes.trim() || undefined };
-  }
   const raw = await api.patch<unknown>(ENDPOINTS.bookings.update(ref), { notes });
   return mapBooking(raw);
 }
@@ -389,11 +312,4 @@ function toDateOnly(s: string): string {
 function daysBetween(a: string, b: string): number {
   if (!a || !b) return 0;
   return Math.round((new Date(b).getTime() - new Date(a).getTime()) / 86_400_000);
-}
-
-function paginate<T>(all: T[], params: BookingListParams): Paginated<T> {
-  const page = params.page ?? 1;
-  const pageSize = params.limit ?? all.length;
-  const start = (page - 1) * pageSize;
-  return { items: all.slice(start, start + pageSize), total: all.length, page, pageSize };
 }

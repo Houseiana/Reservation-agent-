@@ -315,7 +315,7 @@ input[type=range]::-webkit-slider-thumb{
 .drawer-body{flex:1;overflow-y:auto}
 
 .pd-hero{
-  height:280px;position:relative;overflow:hidden;
+  height:350px;position:relative;overflow:hidden;
   background:linear-gradient(135deg,#7B1F2E 0%,#4A0F1B 100%);
   display:grid;place-items:center;color:rgba(255,255,255,.7);
 }

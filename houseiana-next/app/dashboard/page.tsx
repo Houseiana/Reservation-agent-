@@ -137,7 +137,7 @@ export default function Page() {
     where: "",
     checkin: "",
     checkout: "",
-    guests: 0,
+    guests: 1,
     nights: 0,
   });
   const [filters, setFilters] = useState<FiltersState>({
@@ -638,7 +638,13 @@ export default function Page() {
 
   return (
     <div className="app">
-      <Sidebar page={page} setPage={setPage} simulateCall={simulateIncomingCall} t={t} />
+      <Sidebar
+        page={page}
+        setPage={setPage}
+        simulateCall={simulateIncomingCall}
+        bookingsCount={bookingsResult.data?.total}
+        t={t}
+      />
       <main className="main">
         {page === "search" && (
           <Topbar
@@ -1044,11 +1050,14 @@ function Sidebar({
   page,
   setPage,
   simulateCall,
+  bookingsCount,
   t,
 }: {
   page: PageKey;
   setPage: (p: PageKey) => void;
   simulateCall: () => void;
+  /** Total bookings from the list API. Undefined until first fetch. */
+  bookingsCount: number | undefined;
   t: typeof DICT["en"];
 }) {
   return (
@@ -1090,7 +1099,8 @@ function Sidebar({
         </button>
         <button className={`nav-item ${page === "bookings" ? "active" : ""}`} onClick={() => setPage("bookings")}>
           <Icon.Calendar className="nav-icon" />
-          {t.nav.bookings} <span className="nav-badge">42</span>
+          {t.nav.bookings}
+          {bookingsCount !== undefined && <span className="nav-badge">{bookingsCount}</span>}
         </button>
         <button className={`nav-item ${page === "guests" ? "active" : ""}`} onClick={() => setPage("guests")}>
           <Icon.Users className="nav-icon" />
@@ -1136,7 +1146,7 @@ function Topbar({
 }) {
   const [guestsDropdown, setGuestsDropdown] = useState(false);
   function adjustGuests(delta: number) {
-    setSearch((s) => ({ ...s, guests: Math.max(0, Math.min(20, s.guests + delta)) }));
+    setSearch((s) => ({ ...s, guests: Math.max(1, Math.min(20, s.guests + delta)) }));
   }
   return (
     <div className="topbar">
@@ -1207,7 +1217,7 @@ function Topbar({
             placeholder={t.topbar.whoPlaceholder}
             readOnly
             style={{ cursor: "pointer" }}
-            value={search.guests > 0 ? t.topbar.addGuests(search.guests) : ""}
+            value={t.topbar.addGuests(search.guests)}
             onClick={() => setGuestsDropdown((v) => !v)}
           />
           {guestsDropdown && (
@@ -1233,7 +1243,7 @@ function Topbar({
                       type="button"
                       className="counter-btn"
                       onClick={() => adjustGuests(-1)}
-                      disabled={search.guests <= 0}
+                      disabled={search.guests <= 1}
                     >−</button>
                     <span className="counter-val">{search.guests}</span>
                     <button
@@ -1701,22 +1711,41 @@ function PropertyDetail({
               <div className="owner-avatar">{ownerInitials}</div>
               <div className="owner-meta">
                 <div className="owner-name">{p.owner.name}</div>
-                <div className="owner-phone">{p.owner.phone}</div>
-                <div className="owner-response">{p.owner.responseTime}</div>
+                <div className="owner-phone">{p.owner.phone || "—"}</div>
+                {p.owner.email && (
+                  <div className="owner-phone" style={{ fontSize: 11 }}>{p.owner.email}</div>
+                )}
               </div>
               <div className="owner-actions">
-                <a className="owner-btn call" href={`tel:${cleanPhone(p.owner.phone)}`} title={t.owner.callOwner}>
-                  <Icon.Phone size={16} />
-                </a>
-                <a
-                  className="owner-btn wa"
-                  href={waLink(p.owner.whatsapp, ownerMessage)}
-                  target="_blank"
-                  rel="noreferrer"
-                  title={t.owner.waOwner}
-                >
-                  <Icon.WhatsApp size={16} />
-                </a>
+                {p.owner.phone && (
+                  <a className="owner-btn call" href={`tel:${cleanPhone(p.owner.phone)}`} title={t.owner.callOwner}>
+                    <Icon.Phone size={16} />
+                  </a>
+                )}
+                {(p.owner.whatsapp || p.owner.phone) && (
+                  <a
+                    className="owner-btn wa"
+                    href={waLink(p.owner.whatsapp || p.owner.phone, ownerMessage)}
+                    target="_blank"
+                    rel="noreferrer"
+                    title={t.owner.waOwner}
+                  >
+                    <Icon.WhatsApp size={16} />
+                  </a>
+                )}
+                {p.owner.email && (
+                  <a
+                    className="owner-btn"
+                    href={`mailto:${p.owner.email}?subject=${encodeURIComponent(pName(p, lang))}&body=${encodeURIComponent(ownerMessage)}`}
+                    title="Email owner"
+                    style={{ background: "var(--ghost)", color: "var(--text)" }}
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
+                      <polyline points="22,6 12,13 2,6" />
+                    </svg>
+                  </a>
+                )}
               </div>
             </div>
           </div>

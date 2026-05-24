@@ -1,7 +1,6 @@
-import { api, USE_MOCK } from "../client";
+import { api } from "../client";
 import { ENDPOINTS } from "../endpoints";
 import type { Guest, Paginated } from "../types";
-import { GUESTS } from "@/data";
 
 export interface GuestListParams {
   search?: string;
@@ -22,15 +21,6 @@ export async function listGuests(
   params: GuestListParams = {},
   signal?: AbortSignal,
 ): Promise<Paginated<Guest>> {
-  if (USE_MOCK) {
-    const q = (params.search || "").toLowerCase().trim();
-    const filtered = q
-      ? GUESTS.filter((g) =>
-          `${g.first} ${g.last} ${g.email} ${g.phone} ${g.id}`.toLowerCase().includes(q),
-        )
-      : GUESTS;
-    return paginate(filtered, params);
-  }
   const raw = await api.get<unknown>(ENDPOINTS.guests.list, {
     query: {
       search: params.search,
@@ -43,29 +33,11 @@ export async function listGuests(
 }
 
 export async function getGuest(id: string, signal?: AbortSignal): Promise<Guest> {
-  if (USE_MOCK) {
-    const g = GUESTS.find((x) => x.id === id);
-    if (!g) throw new Error(`Guest ${id} not found in mock data`);
-    return g;
-  }
   const raw = await api.get<unknown>(ENDPOINTS.guests.detail(id), { signal });
   return mapGuest(raw);
 }
 
 export async function createGuest(input: GuestCreateInput): Promise<Guest> {
-  if (USE_MOCK) {
-    return {
-      id: "G-" + Math.random().toString(36).slice(2, 7).toUpperCase(),
-      first: input.first,
-      last: input.last,
-      email: input.email,
-      phone: input.phone,
-      nat: input.nat || "—",
-      bookings: 0,
-      ltv: "—",
-      isNew: true,
-    };
-  }
   const raw = await api.post<unknown>(
     ENDPOINTS.guests.create,
     input as unknown as Record<string, unknown>,
@@ -149,11 +121,4 @@ function mapGuest(raw: unknown): Guest {
 
 function formatLtv(n: number): string {
   return Math.round(n).toLocaleString();
-}
-
-function paginate<T>(all: T[], params: GuestListParams): Paginated<T> {
-  const page = params.page ?? 1;
-  const pageSize = params.limit ?? all.length;
-  const start = (page - 1) * pageSize;
-  return { items: all.slice(start, start + pageSize), total: all.length, page, pageSize };
 }
