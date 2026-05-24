@@ -1653,12 +1653,15 @@ function PropertyDetail({
     return () => { clearTimeout(id); ctrl.abort(); };
   }, [quoteGuestSearch]);
 
-  // Quote calculations (same fee structure as booking)
-  const qSubtotal = p.price * nights;
-  const qCleaning = p.fees.cleaning;
-  const qUtilities = p.fees.utilities;
-  const qBookingFee = Math.round((qSubtotal * p.fees.bookingFeePct) / 100);
-  const qTotal = qSubtotal + qCleaning + qUtilities + qBookingFee;
+  // Quote calculations — prefer the backend pricing breakdown when it
+  // exists (detail endpoint), fall back to local computation otherwise.
+  const qNightly = p.pricing?.nightlyRate ?? p.price;
+  const qNights = p.pricing?.nights ?? nights;
+  const qSubtotal = p.pricing?.subtotal ?? qNightly * qNights;
+  const qCleaning = p.pricing?.cleaningFee ?? p.fees.cleaning;
+  const qUtilities = p.pricing ? p.pricing.waterFee + p.pricing.electricityFee : p.fees.utilities;
+  const qServiceFee = p.pricing?.serviceFee ?? Math.round((qSubtotal * p.fees.bookingFeePct) / 100);
+  const qTotal = p.pricing?.total ?? qSubtotal + qCleaning + qUtilities + qServiceFee;
   const quoteMsg = t.detail.quoteMsg(
     quoteFirstName || "there",
     quoteRef,
@@ -1666,11 +1669,11 @@ function PropertyDetail({
     pLoc(p, lang),
     formatDate(search.checkin),
     formatDate(search.checkout),
-    nights,
-    `${p.currency} ${p.price.toLocaleString()} × ${nights} = ${p.currency} ${qSubtotal.toLocaleString()}`,
-    `${p.currency} ${qCleaning}`,
-    `${p.currency} ${qUtilities}`,
-    `${p.currency} ${qBookingFee.toLocaleString()}`,
+    qNights,
+    `${p.currency} ${qNightly.toLocaleString()} × ${qNights} = ${p.currency} ${qSubtotal.toLocaleString()}`,
+    `${p.currency} ${qCleaning.toLocaleString()}`,
+    `${p.currency} ${qUtilities.toLocaleString()}`,
+    `${p.currency} ${qServiceFee.toLocaleString()}`,
     qTotal.toLocaleString(),
     p.currency,
   );

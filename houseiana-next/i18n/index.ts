@@ -565,7 +565,7 @@ export const DICT: Record<Lang, Dict> = {
       quoteSentToast: "Quote sent",
       quoteMissingPhone: "Enter a phone number first",
       quoteMsg: (firstName, qref, propName, loc, checkin, checkout, nights, nightlyLine, cleaning, utilities, bookingFee, total, currency) =>
-        `Hi ${firstName}, here's your Houseiana quote ${qref} 🏡\n\n📍 ${propName}\n${loc}\n\n📅 Check-in: ${checkin}\n📅 Check-out: ${checkout}\n🌙 ${nights} nights\n\n💰 Price breakdown:\n• ${nightlyLine}\n• Cleaning: ${cleaning}\n• Utilities (water & electricity): ${utilities}\n• Booking fee (10%): ${bookingFee}\n──────────\nTotal: ${currency} ${total}\n\n⏱ This quote is valid for 24 hours.\n\nTo confirm, reply to this message and we'll send the secure payment link. — Houseiana`,
+        `Hi ${firstName}, here's your Houseiana quote ${qref} 🏡\n\n📍 ${propName}\n${loc}\n\n📅 Check-in: ${checkin}\n📅 Check-out: ${checkout}\n🌙 ${nights} nights\n\n💰 Price breakdown:\n• ${nightlyLine}\n• Cleaning: ${cleaning}\n• Utilities (water & electricity): ${utilities}\n• Service fee: ${bookingFee}\n──────────\nTotal: ${currency} ${total}\n\n⏱ This quote is valid for 24 hours.\n\nTo confirm, reply to this message and we'll send the secure payment link. — Houseiana`,
     },
     booking: {
       bookHeading: (name) => `Book — ${name}`,
@@ -952,7 +952,7 @@ export const DICT: Record<Lang, Dict> = {
       quoteSentToast: "تم إرسال عرض السعر",
       quoteMissingPhone: "ادخل رقم تليفون أولاً",
       quoteMsg: (firstName, qref, propName, loc, checkin, checkout, nights, nightlyLine, cleaning, utilities, bookingFee, total, currency) =>
-        `أهلاً ${firstName}، ده عرض السعر بتاعك من Houseiana ${qref} 🏡\n\n📍 ${propName}\n${loc}\n\n📅 الوصول: ${checkin}\n📅 المغادرة: ${checkout}\n🌙 ${nights} ليالٍ\n\n💰 تفاصيل السعر:\n• ${nightlyLine}\n• رسوم نظافة: ${cleaning}\n• مرافق (مياه وكهرباء): ${utilities}\n• مصاريف حجز (10%): ${bookingFee}\n──────────\nالإجمالي: ${total} ${currency}\n\n⏱ العرض ده صالح لمدة 24 ساعة.\n\nللتأكيد، رد على الرسالة وهنبعتلك لينك الدفع الآمن. — Houseiana`,
+        `أهلاً ${firstName}، ده عرض السعر بتاعك من Houseiana ${qref} 🏡\n\n📍 ${propName}\n${loc}\n\n📅 الوصول: ${checkin}\n📅 المغادرة: ${checkout}\n🌙 ${nights} ليالٍ\n\n💰 تفاصيل السعر:\n• ${nightlyLine}\n• رسوم نظافة: ${cleaning}\n• مرافق (مياه وكهرباء): ${utilities}\n• رسوم الخدمة: ${bookingFee}\n──────────\nالإجمالي: ${total} ${currency}\n\n⏱ العرض ده صالح لمدة 24 ساعة.\n\nللتأكيد، رد على الرسالة وهنبعتلك لينك الدفع الآمن. — Houseiana`,
     },
     booking: {
       bookHeading: (name) => `حجز — ${name}`,
