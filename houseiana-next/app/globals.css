@@ -365,6 +365,15 @@ input[type=range]::-webkit-slider-thumb{
 .pd-skel.line.short{width:40%}
 .pd-skel.line.medium{width:65%}
 .pd-skel.line.long{width:90%}
+
+/* Skeleton placeholder for property cards while /property-search is loading */
+.property-card-skel{
+  border:1px solid var(--line);border-radius:14px;overflow:hidden;background:#fff;
+}
+.property-card-skel .pd-skel{border-radius:0}
+.property-card-skel .img{height:180px}
+.property-card-skel .body{padding:14px}
+.property-card-skel .body .pd-skel{border-radius:6px}
 .pd-photo-count{
   position:absolute;top:14px;right:14px;z-index:2;
   background:rgba(0,0,0,.55);color:#fff;padding:5px 10px;border-radius:6px;

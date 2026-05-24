@@ -644,7 +644,20 @@ export default function Page() {
                   </div>
                 </div>
               </div>
-              {filtered.length === 0 ? (
+              {searchResult.loading && filtered.length === 0 ? (
+                <div className="property-grid">
+                  {Array.from({ length: 6 }).map((_, i) => (
+                    <div className="property-card-skel" key={i}>
+                      <div className="pd-skel img" />
+                      <div className="body">
+                        <div className="pd-skel line long" />
+                        <div className="pd-skel line medium" />
+                        <div className="pd-skel line short" style={{ marginBottom: 0 }} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : filtered.length === 0 ? (
                 <div style={{ gridColumn: "1/-1", textAlign: "center", padding: "60px 20px", color: "var(--muted)" }}>
                   <Icon.Search size={44} style={{ marginBottom: 12, strokeWidth: 1.5 }} />
                   <div style={{ fontSize: 15, fontWeight: 500, color: "var(--text)", marginBottom: 4 }}>{t.results.noResults}</div>
@@ -680,6 +693,7 @@ export default function Page() {
               t={t}
               lang={lang}
               bookings={bookings}
+              bookingStatuses={bookingStatusesLookup.data ?? []}
               onOpenBooking={(ref) => setSelectedBookingRef(ref)}
             />
           </section>
@@ -2340,7 +2354,21 @@ function BookingFlow({
 /* ============================================================
    BOOKINGS PAGE
 ============================================================ */
-type BookingFilter = "all" | "today" | "tomorrow" | "inHouse" | "pendingPay" | "upcoming" | "confirmed" | "pending" | "checkedin" | "cancelled";
+/** Non-status filters are literal keys; status filters are `status:<enum>`
+ * (e.g. `status:pending`) so they can be generated from the lookup API. */
+type BookingFilter = "all" | "today" | "tomorrow" | "inHouse" | "pendingPay" | string;
+
+/** Map a backend status lookup name (e.g. "Upcoming", "Checked-in") to the
+ * local Booking.status enum value. Mirrors mapStatus() in lib/api/resources/bookings.ts. */
+function statusNameToEnum(name: string): Booking["status"] {
+  const k = name.toLowerCase().replace(/[\s-_]/g, "");
+  if (k.startsWith("checkedout")) return "checkedout";
+  if (k.startsWith("checkedin")) return "checkedin";
+  if (k === "cancelled" || k === "canceled") return "cancelled";
+  if (k === "pending" || k === "requested" || k === "draft") return "pending";
+  // "Upcoming" and anything else fall back to "confirmed".
+  return "confirmed";
+}
 
 function daysBetween(a: string, b: string) {
   return Math.round((new Date(b).getTime() - new Date(a).getTime()) / 86400000);
@@ -2379,12 +2407,13 @@ const CHANNEL_ICON = {
 };
 
 function BookingsPage({
-  goToSearch, t, lang, bookings, onOpenBooking,
+  goToSearch, t, lang, bookings, bookingStatuses, onOpenBooking,
 }: {
   goToSearch: () => void;
   t: typeof DICT["en"];
   lang: Lang;
   bookings: Booking[];
+  bookingStatuses: LookupItem[];
   onOpenBooking: (ref: string) => void;
 }) {
   const [filter, setFilter] = useState<BookingFilter>("all");
@@ -2397,28 +2426,11 @@ function BookingsPage({
     [bookings, today]
   );
 
-  const counts = useMemo(() => {
-    let todayIn = 0, inHouse = 0, todayOut = 0, paymentPending = 0, upcoming = 0;
-    for (const { b, urgency } of annotated) {
-      if (b.status === "cancelled") continue;
-      if (urgency.key === "today") todayIn++;
-      if (urgency.key === "inHouse" || urgency.key === "checkoutToday" || urgency.key === "lateCheckout") inHouse++;
-      if (urgency.key === "checkoutToday" || urgency.key === "lateCheckout") todayOut++;
-      if (b.paymentStatus !== "paid" && b.status !== "checkedout") paymentPending++;
-      if (urgency.key === "today" || urgency.key === "tomorrow" || urgency.key === "inDays") upcoming++;
-    }
-    return { todayIn, inHouse, todayOut, paymentPending, upcoming };
-  }, [annotated]);
-
   const filtered = useMemo(() => {
-    return annotated.filter(({ b, urgency }) => {
+    return annotated.filter(({ b }) => {
       if (filter === "all") return true;
-      if (filter === "today") return urgency.key === "today" || urgency.key === "checkoutToday";
-      if (filter === "tomorrow") return urgency.key === "tomorrow";
-      if (filter === "inHouse") return b.status === "checkedin";
-      if (filter === "pendingPay") return b.paymentStatus !== "paid" && b.status !== "checkedout" && b.status !== "cancelled";
-      if (filter === "upcoming") return ["today", "tomorrow", "inDays"].includes(urgency.key as string);
-      return b.status === filter;
+      if (filter.startsWith("status:")) return b.status === filter.slice(7);
+      return false;
     });
   }, [annotated, filter]);
 
@@ -2433,15 +2445,17 @@ function BookingsPage({
 
   const pills: { k: BookingFilter; lbl: string; count?: number }[] = [
     { k: "all", lbl: t.bookingsPage.filters.all, count: bookings.length },
-    { k: "today", lbl: t.bookingsPage.filters.today, count: counts.todayIn + counts.todayOut },
-    { k: "tomorrow", lbl: t.bookingsPage.filters.tomorrow },
-    { k: "inHouse", lbl: t.bookingsPage.filters.inHouse, count: counts.inHouse },
-    { k: "pendingPay", lbl: t.bookingsPage.filters.pendingPay, count: counts.paymentPending },
-    { k: "upcoming", lbl: t.bookingsPage.filters.upcoming, count: counts.upcoming },
-    { k: "confirmed", lbl: t.bookingsPage.statuses.confirmed },
-    { k: "pending", lbl: t.bookingsPage.statuses.pending },
-    { k: "checkedin", lbl: t.bookingsPage.statuses.checkedin },
-    { k: "cancelled", lbl: t.bookingsPage.statuses.cancelled },
+    // Status pills come from /reservation-agent-lookup/booking-statuses
+    // — the backend is the single source of truth for which statuses
+    // exist (today: Upcoming / Pending / Checked-in / Cancelled).
+    ...bookingStatuses.map((s) => {
+      const enumVal = statusNameToEnum(s.name);
+      return {
+        k: `status:${enumVal}`,
+        lbl: s.name,
+        count: bookings.filter((b) => b.status === enumVal).length,
+      };
+    }),
   ];
 
   function urgencyBadge(u: { key: ReturnType<typeof urgencyOf>["key"]; days: number }) {
