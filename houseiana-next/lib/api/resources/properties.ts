@@ -197,6 +197,12 @@ function mapProperty(raw: unknown): Property {
   const photos = Array.isArray(r.photos)
     ? (r.photos as unknown[]).filter((x): x is string => typeof x === "string" && x.length > 0)
     : [];
+  // The list endpoint returns a single `coverPhoto` string instead of a
+  // full gallery. Promote it to photos[0] so PropertyCard can render an
+  // image without a second request.
+  if (photos.length === 0 && typeof r.coverPhoto === "string" && r.coverPhoto.length > 0) {
+    photos.push(r.coverPhoto);
+  }
 
   return {
     id,

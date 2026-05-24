@@ -56,6 +56,7 @@ export interface Property {
   policies: { checkin: string; checkout: string; minNights: number; cancel: string };
   owner: Owner;
   photos?: string[];
+  coverPhoto?: string; // URL of single cover photo, promoted to photos[0] by normalizeProperty
 }
 
 export interface Guest {

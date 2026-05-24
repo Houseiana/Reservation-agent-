@@ -110,6 +110,24 @@ function waShare(text: string) {
   return `https://wa.me/?text=${encodeURIComponent(text)}`;
 }
 
+/** Build a compact page-number list with ellipsis around the current page.
+ * Examples (current=5):
+ *   total=4  → [1, 2, 3, 4]
+ *   total=10 → [1, 2, 3, 4, 5, 6, 7, "...", 10]
+ *   total=34 → [1, "...", 3, 4, 5, 6, 7, "...", 34]
+ */
+function pageNumbers(current: number, total: number): Array<number | "..."> {
+  if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
+  const out: Array<number | "..."> = [1];
+  const start = Math.max(2, current - 2);
+  const end = Math.min(total - 1, current + 2);
+  if (start > 2) out.push("...");
+  for (let i = start; i <= end; i++) out.push(i);
+  if (end < total - 1) out.push("...");
+  out.push(total);
+  return out;
+}
+
 export default function Page() {
   const { user } = useUser();
   const adminId = user?.id ?? "";
@@ -295,6 +313,35 @@ export default function Page() {
     return ids.length ? ids : undefined;
   }, [filters.amenities]);
 
+  const [searchPage, setSearchPage] = useState(1);
+  const PAGE_SIZE = 20;
+  const resultsTopRef = useRef<HTMLDivElement | null>(null);
+  function goToPage(p: number) {
+    setSearchPage(p);
+    resultsTopRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+  // Reset to first page whenever filters or the search query change so the
+  // user doesn't end up on an empty page N of a freshly-narrowed search.
+  useEffect(() => {
+    setSearchPage(1);
+  }, [
+    search.where,
+    search.checkin,
+    search.checkout,
+    search.guests,
+    filters.priceMin,
+    filters.priceMax,
+    filters.bedrooms,
+    filters.bathrooms,
+    filters.beds,
+    filters.areaMin,
+    filters.areaMax,
+    filters.flags,
+    filters.type,
+    amenityIds,
+    sort,
+  ]);
+
   const searchResult = useAsync(
     (signal) =>
       listProperties(
@@ -314,8 +361,8 @@ export default function Page() {
           amenities: amenityIds,
           instantBook: filters.flags.has("instantBook") || undefined,
           sortBy: sort ?? undefined,
-          page: 1,
-          limit: 20,
+          page: searchPage,
+          limit: PAGE_SIZE,
         },
         signal,
       ),
@@ -335,10 +382,13 @@ export default function Page() {
       filters.type,
       amenityIds,
       sort,
+      searchPage,
     ],
   );
 
   const filtered = searchResult.data?.items ?? [];
+  const totalResults = searchResult.data?.total ?? 0;
+  const totalPages = Math.max(1, Math.ceil(totalResults / PAGE_SIZE));
 
   function toggleGroup(name: string) {
     setCollapsedGroups((prev) => {
@@ -620,11 +670,11 @@ export default function Page() {
               t={t}
             />
             <div className="results">
-              <div className="results-head">
+              <div className="results-head" ref={resultsTopRef}>
                 <div>
                   <div className="results-title">{search.where ? t.results.staysIn(search.where) : t.results.all}</div>
                   <div className="results-meta">
-                    {t.results.meta(filtered.length, `${formatDateShort(search.checkin)} → ${formatDateShort(search.checkout)}`, search.guests)}
+                    {t.results.meta(totalResults || filtered.length, `${formatDateShort(search.checkin)} → ${formatDateShort(search.checkout)}`, search.guests)}
                   </div>
                 </div>
                 <div className="results-tools">
@@ -684,6 +734,35 @@ export default function Page() {
                   })}
                 </div>
               )}
+              {totalPages > 1 && (
+                <div className="pagination" aria-label="Property search pagination">
+                  <button
+                    className="pagination-btn"
+                    onClick={() => goToPage(Math.max(1, searchPage - 1))}
+                    disabled={searchPage === 1 || searchResult.loading}
+                    aria-label="Previous page"
+                  >←</button>
+                  {pageNumbers(searchPage, totalPages).map((p, i) =>
+                    p === "..." ? (
+                      <span key={`gap-${i}`} className="pagination-ellipsis">…</span>
+                    ) : (
+                      <button
+                        key={p}
+                        className={`pagination-btn ${p === searchPage ? "active" : ""}`}
+                        onClick={() => p !== searchPage && goToPage(p)}
+                        disabled={searchResult.loading}
+                        aria-current={p === searchPage ? "page" : undefined}
+                      >{p}</button>
+                    )
+                  )}
+                  <button
+                    className="pagination-btn"
+                    onClick={() => goToPage(Math.min(totalPages, searchPage + 1))}
+                    disabled={searchPage === totalPages || searchResult.loading}
+                    aria-label="Next page"
+                  >→</button>
+                </div>
+              )}
             </div>
           </section>
 
@@ -693,6 +772,7 @@ export default function Page() {
               t={t}
               lang={lang}
               bookings={bookings}
+              loading={bookingsResult.loading}
               bookingStatuses={bookingStatusesLookup.data ?? []}
               onOpenBooking={(ref) => setSelectedBookingRef(ref)}
             />
@@ -1393,6 +1473,9 @@ function PropertyCard({
   return (
     <div className={`property ${p.country}`} onClick={onOpen}>
       <div className="property-img">
+        {p.coverPhoto && (
+          <img className="property-img-cover" src={p.coverPhoto} alt={pName(p, lang)} />
+        )}
         <span className="property-tag">{p.tier === "luxury" ? t.common.luxury : t.common.standard}</span>
         <span
           className={`property-fav ${isFav ? "active" : ""}`}
@@ -2407,12 +2490,13 @@ const CHANNEL_ICON = {
 };
 
 function BookingsPage({
-  goToSearch, t, lang, bookings, bookingStatuses, onOpenBooking,
+  goToSearch, t, lang, bookings, loading, bookingStatuses, onOpenBooking,
 }: {
   goToSearch: () => void;
   t: typeof DICT["en"];
   lang: Lang;
   bookings: Booking[];
+  loading: boolean;
   bookingStatuses: LookupItem[];
   onOpenBooking: (ref: string) => void;
 }) {
@@ -2524,7 +2608,17 @@ function BookingsPage({
             </tr>
           </thead>
           <tbody>
-            {filtered.length === 0 ? (
+            {loading && filtered.length === 0 ? (
+              Array.from({ length: 5 }).map((_, i) => (
+                <tr key={`skel-${i}`}>
+                  {Array.from({ length: 7 }).map((__, j) => (
+                    <td key={j} style={{ padding: "13px 16px" }}>
+                      <div className="pd-skel line" style={{ width: j === 6 ? "30%" : "70%", marginBottom: 0 }} />
+                    </td>
+                  ))}
+                </tr>
+              ))
+            ) : filtered.length === 0 ? (
               <tr>
                 <td colSpan={7}>
                   <div className="bk-empty">{t.bookingsPage.noBookings}</div>
@@ -3499,13 +3593,15 @@ function GuestsPage({
             </tr>
           </thead>
           <tbody>
-            {loading && guests.length === 0 && (
-              <tr>
-                <td colSpan={headers.length} style={{ padding: 24, textAlign: "center", color: "var(--muted)", fontSize: 13 }}>
-                  …
-                </td>
+            {loading && guests.length === 0 && Array.from({ length: 5 }).map((_, i) => (
+              <tr key={`skel-${i}`}>
+                {headers.map((__, j) => (
+                  <td key={j} style={{ padding: "13px 16px" }}>
+                    <div className="pd-skel line" style={{ width: j === 0 ? "80%" : "60%", marginBottom: 0 }} />
+                  </td>
+                ))}
               </tr>
-            )}
+            ))}
             {!loading && guests.length === 0 && (
               <tr>
                 <td colSpan={headers.length} style={{ padding: 24, textAlign: "center", color: "var(--muted)", fontSize: 13 }}>
