@@ -214,16 +214,117 @@ function mapProperty(raw: unknown): Property {
     rooms: Array.isArray(r.rooms) ? (r.rooms as Property["rooms"]) : [],
     amenities,
     extras: Array.isArray(r.extras) ? (r.extras as Property["extras"]) : [],
-    fees: (r.fees as Property["fees"]) ?? { cleaning: 0, utilities: 0, bookingFeePct: 0, deposit: 0 },
-    policies: (r.policies as Property["policies"]) ?? {
-      checkin: "—",
-      checkout: "—",
-      minNights: 1,
-      cancel: "—",
-    },
+    fees: extractFees(r),
+    policies: extractPolicies(r),
     owner: extractOwner(r),
     photos,
+    pricing: extractPricing(r),
   };
+}
+
+/**
+ * Mirror the backend's pricing breakdown when it's included on the
+ * payload (detail / search-with-dates endpoints). Returns undefined when
+ * the response doesn't carry a `total` — callers fall back to their own
+ * computation.
+ */
+function extractPricing(r: Record<string, unknown>): Property["pricing"] | undefined {
+  const num = (k: string): number => {
+    const v = r[k];
+    return typeof v === "number" && Number.isFinite(v) ? v : 0;
+  };
+  // Skip when the backend didn't compute a total (typical for the list
+  // endpoint that doesn't get dates).
+  if (typeof r.total !== "number") return undefined;
+  return {
+    nightlyRate: num("nightlyRate"),
+    nights: num("nights"),
+    subtotal: num("subtotal"),
+    cleaningFee: num("cleaningFee"),
+    waterFee: num("waterFee"),
+    electricityFee: num("electricityFee"),
+    serviceFee: num("serviceFee"),
+    total: num("total"),
+  };
+}
+
+/**
+ * Pull fee fields out of a property payload. Backend uses flat fields
+ * (cleaningFee / waterFee / electricityFee / serviceFee + subtotal) but
+ * the local Property shape groups them under `fees`. Service fee % is
+ * derived from `serviceFee / subtotal` so the booking-flow's totals stay
+ * consistent with what the backend would compute.
+ */
+function extractFees(r: Record<string, unknown>): Property["fees"] {
+  const nested = r.fees && typeof r.fees === "object" ? (r.fees as Record<string, unknown>) : null;
+  const num = (src: Record<string, unknown>, ...keys: string[]): number => {
+    for (const k of keys) {
+      const v = src[k];
+      if (typeof v === "number" && Number.isFinite(v)) return v;
+    }
+    return 0;
+  };
+
+  if (nested) {
+    return {
+      cleaning: num(nested, "cleaning", "cleaningFee"),
+      utilities: num(nested, "utilities", "utilitiesFee"),
+      bookingFeePct: num(nested, "bookingFeePct", "serviceFeePct"),
+      deposit: num(nested, "deposit"),
+    };
+  }
+
+  const cleaning = num(r, "cleaningFee", "cleaning");
+  const utilities = num(r, "waterFee") + num(r, "electricityFee") + num(r, "utilitiesFee");
+  const serviceFee = num(r, "serviceFee", "bookingFee");
+  const subtotal = num(r, "subtotal");
+  const bookingFeePct = subtotal > 0 && serviceFee > 0 ? Math.round((serviceFee / subtotal) * 100) : 0;
+  const deposit = num(r, "deposit", "depositAmount");
+
+  return { cleaning, utilities, bookingFeePct, deposit };
+}
+
+/**
+ * Pull booking-policy fields. Backend has checkInTime / checkOutTime /
+ * minNights / cancellationPolicyType / freeCancellationHours / freeCancellationDays;
+ * we fold them into the local `policies` shape with a human-readable
+ * cancellation string.
+ */
+function extractPolicies(r: Record<string, unknown>): Property["policies"] {
+  const nested = r.policies && typeof r.policies === "object" ? (r.policies as Record<string, unknown>) : null;
+  const src = nested ?? r;
+  const str = (...keys: string[]): string => {
+    for (const k of keys) {
+      const v = src[k];
+      if (typeof v === "string" && v.trim()) return v.trim();
+    }
+    return "";
+  };
+  const num = (...keys: string[]): number => {
+    for (const k of keys) {
+      const v = src[k];
+      if (typeof v === "number" && Number.isFinite(v)) return v;
+    }
+    return 0;
+  };
+
+  const checkin = str("checkin", "checkIn", "checkInTime", "check_in_time") || "—";
+  const checkout = str("checkout", "checkOut", "checkOutTime", "check_out_time") || "—";
+  const minNights = num("minNights", "minimumNights", "min_nights") || 1;
+
+  let cancel = str("cancel", "cancellationPolicy");
+  if (!cancel) {
+    const type = str("cancellationPolicyType", "cancellationType");
+    const hours = num("freeCancellationHours");
+    const days = num("freeCancellationDays");
+    if (type) {
+      const window = days > 0 ? `${days} day${days === 1 ? "" : "s"} before` : hours > 0 ? `${hours}h before` : "";
+      const label = type.charAt(0) + type.slice(1).toLowerCase();
+      cancel = window ? `${label} — full refund ${window}` : label;
+    }
+  }
+
+  return { checkin, checkout, minNights, cancel: cancel || "—" };
 }
 
 /**

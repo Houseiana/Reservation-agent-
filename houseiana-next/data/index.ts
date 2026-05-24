@@ -58,6 +58,19 @@ export interface Property {
   owner: Owner;
   photos?: string[];
   coverPhoto?: string; // URL of single cover photo, promoted to photos[0] by normalizeProperty
+  /** Backend-computed pricing breakdown — present on the detail endpoint
+   * (and any other endpoint that takes checkin/checkout). Prefer these
+   * values for display; they reflect the canonical totals. */
+  pricing?: {
+    nightlyRate: number;
+    nights: number;
+    subtotal: number;
+    cleaningFee: number;
+    waterFee: number;
+    electricityFee: number;
+    serviceFee: number;
+    total: number;
+  };
 }
 
 export interface Guest {

@@ -191,6 +191,9 @@ export default function Page() {
   }
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set(["booking"]));
   const [whereDropdown, setWhereDropdown] = useState(false);
+  // Mobile drawer state — desktop ignores these because CSS shows sidebar/filters inline.
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [rtl, setRtl] = useState(false);
   const lang: Lang = rtl ? "ar" : "en";
   const t = DICT[lang];
@@ -640,11 +643,39 @@ export default function Page() {
     <div className="app">
       <Sidebar
         page={page}
-        setPage={setPage}
+        setPage={(p) => { setPage(p); setSidebarOpen(false); }}
         simulateCall={simulateIncomingCall}
         bookingsCount={bookingsResult.data?.total}
+        open={sidebarOpen}
         t={t}
       />
+      {/* Mobile-only floating buttons + backdrop. Hidden on desktop via CSS. */}
+      <button
+        className="mobile-toggle nav-toggle"
+        onClick={() => setSidebarOpen((v) => !v)}
+        aria-label="Open menu"
+      >
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <line x1="3" y1="6" x2="21" y2="6" />
+          <line x1="3" y1="12" x2="21" y2="12" />
+          <line x1="3" y1="18" x2="21" y2="18" />
+        </svg>
+      </button>
+      {page === "search" && (
+        <button
+          className="mobile-toggle filter-toggle"
+          onClick={() => setFiltersOpen((v) => !v)}
+          aria-label="Open filters"
+        >
+          <Icon.Filter />
+        </button>
+      )}
+      {(sidebarOpen || filtersOpen) && (
+        <div
+          className="mobile-backdrop"
+          onClick={() => { setSidebarOpen(false); setFiltersOpen(false); }}
+        />
+      )}
       <main className="main">
         {page === "search" && (
           <Topbar
@@ -673,6 +704,7 @@ export default function Page() {
               toggleFlag={toggleFlag}
               propertyTypes={propertyTypesLookup.data ?? []}
               amenities={amenitiesLookup.data ?? []}
+              open={filtersOpen}
               t={t}
             />
             <div className="results">
@@ -837,16 +869,23 @@ export default function Page() {
             />
           )}
         </div>
-        {propertyDetail && drawerView === "detail" && totals && (
-          <div className="drawer-foot" style={{ display: "flex" }}>
-            <div className="drawer-foot-price">
-              <b>{propertyDetail.currency} {totals.total.toLocaleString()}</b>
-              <span>{t.detail.nightsTotal}</span>
-              <small>{t.detail.inclusive(propertyDetail.currency, propertyDetail.price.toLocaleString(), Math.max(1, search.nights))}</small>
+        {propertyDetail && drawerView === "detail" && totals && (() => {
+          // Prefer the backend's authoritative total when the detail
+          // endpoint returned a pricing breakdown.
+          const footerTotal = propertyDetail.pricing?.total ?? totals.total;
+          const nightlyRate = propertyDetail.pricing?.nightlyRate ?? propertyDetail.price;
+          const nightsCount = propertyDetail.pricing?.nights ?? Math.max(1, search.nights);
+          return (
+            <div className="drawer-foot" style={{ display: "flex" }}>
+              <div className="drawer-foot-price">
+                <b>{propertyDetail.currency} {footerTotal.toLocaleString()}</b>
+                <span>{t.detail.nightsTotal}</span>
+                <small>{t.detail.inclusive(propertyDetail.currency, nightlyRate.toLocaleString(), nightsCount)}</small>
+              </div>
+              <button className="btn btn-primary btn-lg" onClick={startBooking}>{t.common.continueBooking}</button>
             </div>
-            <button className="btn btn-primary btn-lg" onClick={startBooking}>{t.common.continueBooking}</button>
-          </div>
-        )}
+          );
+        })()}
       </div>
 
       {/* BOOKING DETAIL DRAWER */}
@@ -1051,6 +1090,7 @@ function Sidebar({
   setPage,
   simulateCall,
   bookingsCount,
+  open,
   t,
 }: {
   page: PageKey;
@@ -1058,10 +1098,12 @@ function Sidebar({
   simulateCall: () => void;
   /** Total bookings from the list API. Undefined until first fetch. */
   bookingsCount: number | undefined;
+  /** Mobile-only — controls the drawer slide. Ignored on desktop layout. */
+  open: boolean;
   t: typeof DICT["en"];
 }) {
   return (
-    <aside className="sidebar">
+    <aside className={`sidebar ${open ? "open" : ""}`}>
       <div className="brand">
         <div className="brand-mark">H</div>
         <div>
@@ -1295,6 +1337,7 @@ function Filters({
   toggleFlag,
   propertyTypes,
   amenities,
+  open,
   t,
 }: {
   filters: FiltersState;
@@ -1307,6 +1350,8 @@ function Filters({
   toggleFlag: (v: string) => void;
   propertyTypes: LookupItem[];
   amenities: LookupItem[];
+  /** Mobile-only — controls the drawer slide. Ignored on desktop layout. */
+  open: boolean;
   t: typeof DICT["en"];
 }) {
   const counterLabel = {
@@ -1318,7 +1363,7 @@ function Filters({
   };
 
   return (
-    <aside className="filters">
+    <aside className={`filters ${open ? "open" : ""}`}>
       <div className="filters-head">
         <div className="filters-title"><Icon.Filter /> {t.filters.title}</div>
         <button className="filters-clear" onClick={clearFilters}>{t.filters.clearAll}</button>
@@ -1942,20 +1987,49 @@ function PropertyDetail({
 
       <div className="pd-section">
         <h3>{t.detail.pricing}</h3>
-        <div className="sum-row">
-          <span>{p.currency} {p.price.toLocaleString()} × {nights} {t.common.nights}</span>
-          <b>{p.currency} {(p.price * nights).toLocaleString()}</b>
-        </div>
-        <div className="sum-row"><span>{t.detail.cleaning}</span><b>{p.currency} {p.fees.cleaning}</b></div>
-        <div className="sum-row"><span>{t.detail.utilities}</span><b>{p.currency} {p.fees.utilities}</b></div>
-        <div className="sum-row">
-          <span>{t.detail.bookingFee} ({p.fees.bookingFeePct}%)</span>
-          <b>{p.currency} {Math.round((p.price * nights * p.fees.bookingFeePct) / 100).toLocaleString()}</b>
-        </div>
-        <div className="sum-row" style={{ color: "var(--muted)", fontSize: 11.5 }}>
-          <span>{t.detail.deposit}</span>
-          <span>{p.currency} {p.fees.deposit.toLocaleString()}</span>
-        </div>
+        {(() => {
+          // Prefer the backend's pricing breakdown when present (detail
+          // endpoint returns it). Fall back to local computation otherwise.
+          const pr = p.pricing;
+          const nightlyRate = pr?.nightlyRate || p.price;
+          const nightsCount = pr?.nights || nights;
+          const subtotal = pr?.subtotal ?? nightlyRate * nightsCount;
+          const cleaningFee = pr?.cleaningFee ?? p.fees.cleaning;
+          const utilities = pr ? pr.waterFee + pr.electricityFee : p.fees.utilities;
+          const serviceFee = pr?.serviceFee ?? Math.round((subtotal * p.fees.bookingFeePct) / 100);
+          const total = pr?.total ?? subtotal + cleaningFee + utilities + serviceFee;
+          return (
+            <>
+              <div className="sum-row">
+                <span>{p.currency} {nightlyRate.toLocaleString()} × {nightsCount} {t.common.nights}</span>
+                <b>{p.currency} {subtotal.toLocaleString()}</b>
+              </div>
+              {cleaningFee > 0 && (
+                <div className="sum-row"><span>{t.detail.cleaning}</span><b>{p.currency} {cleaningFee.toLocaleString()}</b></div>
+              )}
+              {utilities > 0 && (
+                <div className="sum-row"><span>{t.detail.utilities}</span><b>{p.currency} {utilities.toLocaleString()}</b></div>
+              )}
+              {serviceFee > 0 && (
+                <div className="sum-row">
+                  <span>Service fee</span>
+                  <b>{p.currency} {serviceFee.toLocaleString()}</b>
+                </div>
+              )}
+              <div className="sum-divider" />
+              <div className="sum-row" style={{ fontWeight: 600, fontSize: 14 }}>
+                <span>{t.detail.nightsTotal}</span>
+                <b>{p.currency} {total.toLocaleString()}</b>
+              </div>
+              {p.fees.deposit > 0 && (
+                <div className="sum-row" style={{ color: "var(--muted)", fontSize: 11.5 }}>
+                  <span>{t.detail.deposit}</span>
+                  <span>{p.currency} {p.fees.deposit.toLocaleString()}</span>
+                </div>
+              )}
+            </>
+          );
+        })()}
       </div>
 
       <div className="pd-section">
