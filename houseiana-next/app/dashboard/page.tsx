@@ -590,18 +590,20 @@ export default function Page() {
     <div className="app">
       <Sidebar page={page} setPage={setPage} simulateCall={simulateIncomingCall} t={t} />
       <main className="main">
-        <Topbar
-          search={search}
-          setSearch={setSearch}
-          whereDropdown={whereDropdown}
-          setWhereDropdown={setWhereDropdown}
-          rtl={rtl}
-          setRtl={setRtl}
-          openInbox={(tab) => { setInboxOpen(true); setInboxTab(tab); }}
-          onSearch={() => toast(t.toast.searchUpdated)}
-          t={t}
-          lang={lang}
-        />
+        {page === "search" && (
+          <Topbar
+            search={search}
+            setSearch={setSearch}
+            whereDropdown={whereDropdown}
+            setWhereDropdown={setWhereDropdown}
+            rtl={rtl}
+            setRtl={setRtl}
+            openInbox={(tab) => { setInboxOpen(true); setInboxTab(tab); }}
+            onSearch={() => toast(t.toast.searchUpdated)}
+            t={t}
+            lang={lang}
+          />
+        )}
         <div className="content">
           <section className={`page ${page === "search" ? "active" : ""}`} id="page-search">
             <Filters
@@ -1000,10 +1002,12 @@ function Sidebar({
           <Icon.Users className="nav-icon" />
           {t.nav.guests}
         </button>
+        {/* Temporarily hidden — KPIs page WIP
         <button className={`nav-item ${page === "kpis" ? "active" : ""}`} onClick={() => setPage("kpis")}>
           <Icon.Chart className="nav-icon" />
           {t.nav.kpis}
         </button>
+        */}
       </nav>
       <div className="sidebar-foot">v2.4.1 · © Houseiana 2026</div>
     </aside>
@@ -2395,22 +2399,15 @@ function BookingsPage({
 
   const counts = useMemo(() => {
     let todayIn = 0, inHouse = 0, todayOut = 0, paymentPending = 0, upcoming = 0;
-    let totalPendingAmount = 0, totalInHouseRevenue = 0;
     for (const { b, urgency } of annotated) {
       if (b.status === "cancelled") continue;
       if (urgency.key === "today") todayIn++;
-      if (urgency.key === "inHouse" || urgency.key === "checkoutToday" || urgency.key === "lateCheckout") {
-        inHouse++;
-        if (urgency.key === "inHouse" || urgency.key === "lateCheckout") totalInHouseRevenue += b.totalAmount;
-      }
+      if (urgency.key === "inHouse" || urgency.key === "checkoutToday" || urgency.key === "lateCheckout") inHouse++;
       if (urgency.key === "checkoutToday" || urgency.key === "lateCheckout") todayOut++;
-      if (b.paymentStatus !== "paid" && b.status !== "checkedout") {
-        paymentPending++;
-        totalPendingAmount += (b.totalAmount - b.paidAmount);
-      }
+      if (b.paymentStatus !== "paid" && b.status !== "checkedout") paymentPending++;
       if (urgency.key === "today" || urgency.key === "tomorrow" || urgency.key === "inDays") upcoming++;
     }
-    return { todayIn, inHouse, todayOut, paymentPending, upcoming, totalPendingAmount, totalInHouseRevenue };
+    return { todayIn, inHouse, todayOut, paymentPending, upcoming };
   }, [annotated]);
 
   const filtered = useMemo(() => {
@@ -2433,19 +2430,6 @@ function BookingsPage({
     confirmed: "var(--green-soft)", pending: "var(--orange-soft)", checkedin: "var(--blue-soft)",
     checkedout: "#EEF1F4", cancelled: "var(--red-soft)",
   };
-
-  const stats = [
-    { key: "today" as const, icon: <Icon.Calendar size={16} />, bg: "var(--red-soft)", color: "var(--red)",
-      lbl: t.bookingsPage.stats.todayIn, val: counts.todayIn, sub: counts.todayIn > 0 ? `${counts.todayIn} arriving` : "—" },
-    { key: "inHouse" as const, icon: <Icon.Users size={16} />, bg: "var(--blue-soft)", color: "var(--blue)",
-      lbl: t.bookingsPage.stats.inHouse, val: counts.inHouse, sub: counts.totalInHouseRevenue > 0 ? `EGP ${counts.totalInHouseRevenue.toLocaleString()}` : "—" },
-    { key: "today" as const, icon: <Icon.Calendar size={16} />, bg: "#FFE4B5", color: "#7A4700",
-      lbl: t.bookingsPage.stats.todayOut, val: counts.todayOut, sub: "—" },
-    { key: "pendingPay" as const, icon: <Icon.Bolt size={16} />, bg: "var(--orange-soft)", color: "var(--orange)",
-      lbl: t.bookingsPage.stats.paymentPending, val: counts.paymentPending, sub: counts.totalPendingAmount > 0 ? `EGP ${counts.totalPendingAmount.toLocaleString()}` : "—" },
-    { key: "upcoming" as const, icon: <Icon.Calendar size={16} />, bg: "var(--green-soft)", color: "var(--green)",
-      lbl: t.bookingsPage.stats.upcomingWeek, val: counts.upcoming, sub: "—" },
-  ];
 
   const pills: { k: BookingFilter; lbl: string; count?: number }[] = [
     { k: "all", lbl: t.bookingsPage.filters.all, count: bookings.length },
@@ -2495,24 +2479,6 @@ function BookingsPage({
           <button className="btn btn-secondary btn-sm">{t.bookingsPage.exportCsv}</button>
           <button className="btn btn-primary btn-sm" onClick={goToSearch}>{t.bookingsPage.newBooking}</button>
         </div>
-      </div>
-
-      {/* QUICK STATS STRIP */}
-      <div className="bk-stats">
-        {stats.map((s, i) => (
-          <button
-            key={i}
-            className={`bk-stat ${filter === s.key ? "active" : ""}`}
-            onClick={() => setFilter((cur) => (cur === s.key ? "all" : s.key))}
-          >
-            <div className="bk-stat-icon" style={{ background: s.bg, color: s.color }}>{s.icon}</div>
-            <div className="bk-stat-info">
-              <div className="bk-stat-val">{s.val}</div>
-              <div className="bk-stat-lbl">{s.lbl}</div>
-              {s.sub !== "—" && <div className="bk-stat-sub">{s.sub}</div>}
-            </div>
-          </button>
-        ))}
       </div>
 
       {/* FILTER PILLS */}
