@@ -52,6 +52,16 @@ export async function getBookingStatuses(signal?: AbortSignal): Promise<LookupIt
   return normalizeList(await api.get<unknown>(ENDPOINTS.lookups.bookingStatuses, { signal }));
 }
 
+export async function getPaymentMethods(signal?: AbortSignal): Promise<LookupItem[]> {
+  if (USE_MOCK) {
+    return [
+      { id: 1, name: "Paymob" },
+      { id: 2, name: "InstaPay" },
+    ];
+  }
+  return normalizeList(await api.get<unknown>(ENDPOINTS.lookups.paymentMethods, { signal }));
+}
+
 export async function getSortOptions(signal?: AbortSignal): Promise<LookupItem[]> {
   if (USE_MOCK) {
     return [

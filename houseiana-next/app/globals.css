@@ -88,8 +88,13 @@ input,select,textarea{font-family:inherit;font-size:14px;color:inherit;outline:n
 .search-pill{
   flex:1;max-width:780px;display:flex;align-items:center;
   background:#fff;border:1px solid var(--line);border-radius:50px;
-  overflow:hidden;transition:box-shadow .2s, border-color .2s;
+  transition:box-shadow .2s, border-color .2s;
 }
+/* The first/last field need their own radius clipping since the pill no longer
+   clips its children — without this the hover-background corner peeks past the
+   rounded edge. */
+.search-field:first-of-type{border-top-left-radius:50px;border-bottom-left-radius:50px}
+.search-field:last-of-type{border-top-right-radius:50px;border-bottom-right-radius:50px}
 .search-pill:focus-within{box-shadow:var(--shadow-md);border-color:var(--line-strong)}
 .search-field{
   flex:1;padding:9px 18px;cursor:pointer;border-right:1px solid var(--line);
@@ -307,19 +312,61 @@ input[type=range]::-webkit-slider-thumb{
 .drawer-body{flex:1;overflow-y:auto}
 
 .pd-hero{
-  height:280px;position:relative;
+  height:280px;position:relative;overflow:hidden;
   background:linear-gradient(135deg,#7B1F2E 0%,#4A0F1B 100%);
   display:grid;place-items:center;color:rgba(255,255,255,.7);
 }
 .pd-hero.egypt{background:linear-gradient(135deg,#C8A97E 0%,#8B6F47 100%)}
-.pd-hero-thumbs{position:absolute;bottom:14px;left:14px;display:flex;gap:6px;}
+.pd-hero-img{
+  position:absolute;inset:0;width:100%;height:100%;object-fit:cover;
+}
+.pd-hero-thumbs{
+  position:absolute;bottom:14px;left:14px;right:14px;
+  display:flex;gap:6px;z-index:1;
+  overflow-x:auto;overflow-y:hidden;
+  padding-bottom:2px;
+  scrollbar-width:none;
+}
+.pd-hero-thumbs::-webkit-scrollbar{display:none}
 .pd-thumb{
+  flex:0 0 auto;
   width:48px;height:48px;border-radius:6px;background:rgba(0,0,0,.4);
   border:2px solid rgba(255,255,255,.7);
+  background-size:cover;background-position:center;cursor:pointer;
+  padding:0;
 }
-.pd-thumb.active{border-color:#fff;background:rgba(255,255,255,.2)}
+.pd-thumb.active{border-color:#fff;box-shadow:0 0 0 2px rgba(0,0,0,.35)}
+
+/* Prev / next chevrons overlaid on the hero photo */
+.pd-hero-nav{
+  position:absolute;top:50%;transform:translateY(-50%);z-index:2;
+  width:36px;height:36px;border-radius:50%;
+  background:rgba(0,0,0,.55);color:#fff;border:none;cursor:pointer;
+  display:grid;place-items:center;
+  transition:background .15s ease;
+}
+.pd-hero-nav:hover{background:rgba(0,0,0,.8)}
+.pd-hero-nav.prev{left:12px}
+.pd-hero-nav.next{right:12px}
+
+/* Skeleton shimmer used while the property detail is loading */
+@keyframes pd-skeleton-shimmer{
+  0%{background-position:-200% 0}
+  100%{background-position:200% 0}
+}
+.pd-skel{
+  background:linear-gradient(90deg,var(--ghost) 0%,var(--line) 50%,var(--ghost) 100%);
+  background-size:200% 100%;
+  animation:pd-skeleton-shimmer 1.4s ease-in-out infinite;
+  border-radius:8px;
+}
+.pd-skel.hero{height:280px;border-radius:0}
+.pd-skel.line{height:14px;margin-bottom:10px}
+.pd-skel.line.short{width:40%}
+.pd-skel.line.medium{width:65%}
+.pd-skel.line.long{width:90%}
 .pd-photo-count{
-  position:absolute;bottom:14px;right:14px;
+  position:absolute;top:14px;right:14px;z-index:2;
   background:rgba(0,0,0,.55);color:#fff;padding:5px 10px;border-radius:6px;
   font-size:11.5px;display:flex;align-items:center;gap:5px;
 }
@@ -532,20 +579,44 @@ input[type=range]::-webkit-slider-thumb{
 .booking-step.active{display:block}
 
 .steps-bar{
-  display:flex;align-items:center;gap:0;padding:14px 22px;
+  display:flex;align-items:center;gap:0;padding:16px 22px;
   border-bottom:1px solid var(--line);background:#fff;
 }
-.step-item{display:flex;align-items:center;gap:8px;flex:1;color:var(--muted);font-size:12.5px;font-weight:500}
-.step-num{
-  width:24px;height:24px;border-radius:50%;background:var(--ghost);color:var(--muted);
-  display:grid;place-items:center;font-size:11px;font-weight:600;border:1px solid var(--line);
+.step-item{
+  display:flex;align-items:center;gap:10px;flex:0 0 auto;
+  color:var(--muted);font-size:13px;font-weight:500;
+  transition:color .2s ease;
 }
-.step-item.active .step-num{background:var(--yellow);color:var(--charcoal);border-color:var(--yellow-deep)}
-.step-item.active{color:var(--text)}
-.step-item.done .step-num{background:var(--charcoal);color:#fff;border-color:var(--charcoal)}
+.step-num{
+  width:30px;height:30px;border-radius:50%;background:var(--ghost);color:var(--muted);
+  display:grid;place-items:center;font-size:12.5px;font-weight:600;border:1px solid var(--line);
+  flex-shrink:0;
+  transition:background .25s ease, color .25s ease, border-color .25s ease, box-shadow .25s ease;
+}
+.step-item.active{color:var(--text);font-weight:600}
+.step-item.active .step-num{
+  background:var(--yellow);color:var(--charcoal);border-color:var(--yellow-deep);
+  box-shadow:0 0 0 4px rgba(241,196,15,.22);
+}
 .step-item.done{color:var(--text)}
-.step-line{flex:0 0 16px;height:1.5px;background:var(--line);margin:0 4px}
+.step-item.done .step-num{
+  background:var(--charcoal);color:#fff;border-color:var(--charcoal);
+}
+.step-line{
+  flex:1;height:2px;background:var(--line);margin:0 12px;border-radius:2px;
+  transition:background .25s ease;
+}
 .step-item.done + .step-line{background:var(--charcoal)}
+
+/* Inline spinner used inside buttons while their action is pending */
+.spinner-sm{
+  display:inline-block;width:14px;height:14px;
+  border:2px solid currentColor;border-top-color:transparent;
+  border-radius:50%;animation:spinner-rotate .7s linear infinite;
+  vertical-align:-2px;
+}
+@keyframes spinner-rotate{to{transform:rotate(360deg)}}
+button:disabled .spinner-sm{opacity:.85}
 
 .field{margin-bottom:13px}
 .field-row{display:grid;gap:10px}

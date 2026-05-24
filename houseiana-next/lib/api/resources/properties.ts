@@ -41,14 +41,36 @@ export async function listProperties(
   return normalizeListResponse(raw, params);
 }
 
-export async function getProperty(id: string, signal?: AbortSignal): Promise<Property> {
+export interface PropertyDetailParams {
+  checkin?: string;   // YYYY-MM-DD
+  checkout?: string;  // YYYY-MM-DD
+}
+
+export async function getProperty(
+  id: string,
+  params: PropertyDetailParams = {},
+  signal?: AbortSignal,
+): Promise<Property> {
   if (USE_MOCK) {
     const found = PROPERTIES.find((p) => p.id === id);
     if (!found) throw new Error(`Property ${id} not found in mock data`);
     return found;
   }
-  const raw = await api.get<unknown>(ENDPOINTS.properties.detail(id), { signal });
-  return mapProperty(raw);
+  const raw = await api.get<unknown>(ENDPOINTS.properties.detail(id), {
+    query: { checkin: params.checkin, checkout: params.checkout },
+    signal,
+  });
+  // Some backends wrap single resources in { data: {...} } or { result: {...} }.
+  const unwrapped = unwrapDetail(raw);
+  return mapProperty(unwrapped);
+}
+
+function unwrapDetail(raw: unknown): unknown {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return raw;
+  const r = raw as Record<string, unknown>;
+  if (r.data && typeof r.data === "object" && !Array.isArray(r.data)) return r.data;
+  if (r.result && typeof r.result === "object" && !Array.isArray(r.result)) return r.result;
+  return raw;
 }
 
 /**
@@ -172,6 +194,10 @@ function mapProperty(raw: unknown): Property {
     Object.assign(amenities, r.amenities as Record<string, boolean>);
   }
 
+  const photos = Array.isArray(r.photos)
+    ? (r.photos as unknown[]).filter((x): x is string => typeof x === "string" && x.length > 0)
+    : [];
+
   return {
     id,
     name,
@@ -212,6 +238,7 @@ function mapProperty(raw: unknown): Property {
       whatsapp: "",
       responseTime: "—",
     },
+    photos,
   };
 }
 

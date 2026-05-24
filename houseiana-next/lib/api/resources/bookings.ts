@@ -49,6 +49,12 @@ export interface CancelInput {
   reason?: string;
 }
 
+export interface BookingConfirmInput {
+  bookingId: string;
+  paymentMethod: number;
+  adminId: string;
+}
+
 export async function listBookings(
   params: BookingListParams = {},
   signal?: AbortSignal,
@@ -106,8 +112,10 @@ export async function createBooking(args: {
         (new Date(input.checkOut).getTime() - new Date(input.checkIn).getTime()) / 86_400_000,
       ),
     );
+    const mockRef = "HSI-" + Math.random().toString(36).slice(2, 8).toUpperCase();
     return {
-      ref: "HSI-" + Math.random().toString(36).slice(2, 8).toUpperCase(),
+      id: mockRef,
+      ref: mockRef,
       guest,
       property,
       checkin: toDateOnly(input.checkIn),
@@ -131,13 +139,78 @@ export async function createBooking(args: {
   // Some backends return only the new id/ref. Hydrate with the local
   // property/guest objects so the confirmation screen has everything it
   // needs without an extra GET.
-  const mapped = mapBooking(raw);
+  const mapped = mapBooking(unwrapBookingEnvelope(raw));
   if (args.property && (!mapped.property || !mapped.property.id)) mapped.property = args.property;
   if (args.guest && (!mapped.guest || !mapped.guest.id)) mapped.guest = args.guest;
   if (args.total && !mapped.totalAmount) {
     mapped.totalAmount = args.total;
     mapped.total = args.totalDisplay ?? `${mapped.property.currency} ${args.total.toLocaleString()}`;
   }
+  return mapped;
+}
+
+/**
+ * Backend wraps single-booking responses in `{ success, data: {...} }`.
+ * Reach into `data` (and a few common aliases) before mapping.
+ */
+function unwrapBookingEnvelope(raw: unknown): unknown {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return raw;
+  const r = raw as Record<string, unknown>;
+  if (r.data && typeof r.data === "object" && !Array.isArray(r.data)) return r.data;
+  if (r.result && typeof r.result === "object" && !Array.isArray(r.result)) return r.result;
+  if (r.booking && typeof r.booking === "object" && !Array.isArray(r.booking)) return r.booking;
+  return raw;
+}
+
+/**
+ * Confirm a previously-created booking via POST /api/reservation-agent/booking/confirm.
+ * The bookingId comes from the prior createBooking() response.
+ */
+export async function confirmBooking(args: {
+  input: BookingConfirmInput;
+  property?: Property;
+  guest?: Guest;
+  total?: number;
+  totalDisplay?: string;
+}): Promise<Booking> {
+  if (USE_MOCK) {
+    const { input, property, guest, total = 0, totalDisplay = "—" } = args;
+    if (!property || !guest) {
+      throw new Error("Mock confirmBooking requires hydrated property + guest");
+    }
+    return {
+      id: input.bookingId,
+      ref: "HSI-" + Math.random().toString(36).slice(2, 8).toUpperCase(),
+      guest,
+      property,
+      checkin: "",
+      checkout: "",
+      nights: 1,
+      total: totalDisplay,
+      totalAmount: total,
+      paidAmount: total,
+      status: "confirmed",
+      channel: "wa",
+      paymentStatus: "paid",
+      refundAmount: 0,
+      refundStatus: "none",
+      holdUntil: null,
+    };
+  }
+  const raw = await api.post<unknown>(
+    ENDPOINTS.bookings.confirm,
+    args.input as unknown as Record<string, unknown>,
+  );
+  const mapped = mapBooking(unwrapBookingEnvelope(raw));
+  // The /confirm response may only carry the booking id/ref; hydrate the rest
+  // from the locally-known property/guest so the success screen renders fully.
+  if (args.property && (!mapped.property || !mapped.property.id)) mapped.property = args.property;
+  if (args.guest && (!mapped.guest || !mapped.guest.id)) mapped.guest = args.guest;
+  if (args.total && !mapped.totalAmount) {
+    mapped.totalAmount = args.total;
+    mapped.total = args.totalDisplay ?? `${mapped.property.currency} ${args.total.toLocaleString()}`;
+  }
+  if (!mapped.id) mapped.id = args.input.bookingId;
   return mapped;
 }
 
@@ -224,7 +297,8 @@ function mapBooking(raw: unknown): Booking {
   const str = (k: string, fallback = "") => (typeof r[k] === "string" ? (r[k] as string) : fallback);
   const num = (k: string, fallback = 0) => (typeof r[k] === "number" ? (r[k] as number) : fallback);
 
-  const ref = str("bookingCode") || str("reference") || str("ref") || String(r.id ?? "");
+  const id = r.id != null ? String(r.id) : r.bookingId != null ? String(r.bookingId) : undefined;
+  const ref = str("bookingCode") || str("reference") || str("ref") || id || "";
   const checkin = toDateOnly(str("checkIn") || str("checkin"));
   const checkout = toDateOnly(str("checkOut") || str("checkout"));
   const totalAmount = num("totalPrice") || num("totalAmount") || num("total");
@@ -278,6 +352,7 @@ function mapBooking(raw: unknown): Booking {
   };
 
   return {
+    id,
     ref,
     guest,
     property,
@@ -301,7 +376,7 @@ function mapStatus(s: string): Booking["status"] {
   if (k.startsWith("checkedout")) return "checkedout";
   if (k.startsWith("checkedin")) return "checkedin";
   if (k === "cancelled" || k === "canceled") return "cancelled";
-  if (k === "pending") return "pending";
+  if (k === "pending" || k === "requested" || k === "draft") return "pending";
   return "confirmed";
 }
 

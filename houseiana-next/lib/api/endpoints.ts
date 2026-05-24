@@ -6,7 +6,7 @@
 export const ENDPOINTS = {
   properties: {
     list: "/api/reservation-agent/property-search",
-    detail: (id: string) => `/api/reservation-agent/property-search/${id}`,
+    detail: (id: string) => `/api/reservation-agent/property/${id}`,
     availability: (id: string) => `/api/reservation-agent/property-search/${id}/availability`,
   },
   lookups: {
@@ -14,6 +14,7 @@ export const ENDPOINTS = {
     amenities: "/api/reservation-agent-lookup/amenities",
     sortBy: "/api/reservation-agent-lookup/sort-by",
     bookingStatuses: "/api/reservation-agent-lookup/booking-statuses",
+    paymentMethods: "/api/reservation-agent-lookup/payment-methods",
   },
   guests: {
     list: "/api/reservation-agent/guests",
@@ -21,10 +22,15 @@ export const ENDPOINTS = {
     create: "/api/reservation-agent/guests",
     update: (id: string) => `/api/reservation-agent/guests/${id}`,
   },
+  users: {
+    search: "/api/reservation-agent/users",
+    create: "/api/reservation-agent/users",
+  },
   bookings: {
     list: "/api/reservation-agent/bookings",
     detail: (ref: string) => `/api/reservation-agent/bookings/${ref}`,
     create: "/api/reservation-agent/bookings",
+    confirm: "/api/reservation-agent/booking/confirm",
     update: (ref: string) => `/api/reservation-agent/bookings/${ref}`,
     cancel: (ref: string) => `/api/reservation-agent/bookings/${ref}/cancel`,
     refund: (ref: string) => `/api/reservation-agent/bookings/${ref}/refund`,

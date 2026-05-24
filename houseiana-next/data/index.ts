@@ -1,6 +1,6 @@
 export type Country = "egypt";
 
-export const SITE_URL = "https://houseiana.com.eg";
+export const SITE_URL = "https://houseiana.com";
 
 export interface Owner {
   name: string;
@@ -55,6 +55,7 @@ export interface Property {
   fees: { cleaning: number; utilities: number; bookingFeePct: number; deposit: number };
   policies: { checkin: string; checkout: string; minNights: number; cancel: string };
   owner: Owner;
+  photos?: string[];
 }
 
 export interface Guest {
@@ -76,6 +77,8 @@ export type PaymentStatus = "paid" | "partial" | "pending";
 export type RefundStatus = "none" | "requested" | "processed";
 
 export interface Booking {
+  /** Server-assigned identifier — used by /booking/confirm. */
+  id?: string;
   ref: string;
   guest: Guest;
   property: Property;

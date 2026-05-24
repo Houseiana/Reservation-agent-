@@ -20,14 +20,20 @@ import {
   listProperties,
   listGuests,
   createBooking,
+  confirmBooking as confirmBookingApi,
+  createUser,
+  searchUsers,
+  getProperty,
   getPropertyTypes,
   getAmenities,
   getSortOptions,
   getBookingStatuses,
+  getPaymentMethods,
   ApiError,
   type LookupItem,
 } from "@/lib/api";
 import { useAsync } from "@/hooks/useAsync";
+import { useSubmitting } from "@/hooks/useSubmitting";
 import { useUser, UserButton } from "@clerk/nextjs";
 
 function pName(p: Property, lang: Lang) { return lang === "ar" ? p.nameAr : p.name; }
@@ -68,11 +74,10 @@ interface BookingState {
   step: number;
   guest: Guest | null;
   selectedExtras: Set<string>;
-  payment: "card" | "paylink" | "instapay";
+  /** Lookup ID from /reservation-agent-lookup/payment-methods. Null until selected. */
+  payment: number | null;
   paymentSent: boolean;
   paymentVerified: boolean;
-  promoDiscount: number;
-  agentDiscount: number;
 }
 
 function formatDate(s: string) {
@@ -86,9 +91,7 @@ function formatDateShort(s: string) {
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
-const PROMO_CODES: Record<string, number> = { WELCOME10: 10, AGENT5: 5, VIP15: 15, SUMMER20: 20 };
-
-function propertyUrl(p: Property) { return `${SITE_URL}/p/${p.id}`; }
+function propertyUrl(p: Property) { return `${SITE_URL}/property/${p.id}`; }
 function cleanPhone(phone: string) { return phone.replace(/[^\d]/g, ""); }
 function fmtTimeLeft(ms: number): string {
   if (ms <= 0) return "0m";
@@ -121,15 +124,15 @@ export default function Page() {
   });
   const [filters, setFilters] = useState<FiltersState>({
     type: null,
-    priceMin: 0,
+    priceMin: 20,
     priceMax: 200000,
     currency: "EGP",
     bedrooms: 0,
     bathrooms: 0,
     beds: 0,
     capacity: 0,
-    areaMin: 30,
-    areaMax: 500,
+    areaMin: 0,
+    areaMax: 0,
     amenities: new Set<number>(),
     flags: new Set(),
     extras: new Set(),
@@ -176,6 +179,26 @@ export default function Page() {
 
   const [selectedProperty, setSelectedProperty] = useState<Property | null>(null);
   const [drawerView, setDrawerView] = useState<"detail" | "booking">("detail");
+  // Fetch the full property record (with availability for the selected
+  // dates) from /api/reservation-agent/property/{id}. The list response
+  // is used as an instant fallback so the drawer never blinks.
+  const propertyDetailResult = useAsync(
+    (signal) =>
+      getProperty(
+        selectedProperty!.id,
+        { checkin: search.checkin || undefined, checkout: search.checkout || undefined },
+        signal,
+      ),
+    [selectedProperty?.id, search.checkin, search.checkout],
+    { enabled: selectedProperty !== null },
+  );
+  // Use only the data returned by the detail API — never the
+  // list-version fallback, because the list payload is missing fields
+  // like photos. While the fetch is in flight we render a skeleton.
+  const propertyDetail: Property | null =
+    propertyDetailResult.data && propertyDetailResult.data.id === selectedProperty?.id
+      ? propertyDetailResult.data
+      : null;
   // Guests load on the Guests tab and whenever a property drawer is
   // open (the booking flow + quote dialog search guests by name).
   const guestsResult = useAsync(
@@ -189,15 +212,12 @@ export default function Page() {
     step: 1,
     guest: null,
     selectedExtras: new Set(),
-    payment: "card",
+    payment: null,
     paymentSent: false,
     paymentVerified: false,
-    promoDiscount: 0,
-    agentDiscount: 0,
   });
   const [guestSearchQ, setGuestSearchQ] = useState("");
-  const [newGuestForm, setNewGuestForm] = useState({ first: "", last: "", email: "", phone: "" });
-  const [promoCode, setPromoCode] = useState("");
+  const [newGuestForm, setNewGuestForm] = useState({ first: "", last: "", email: "", countryCode: "20", phone: "" });
   const [confRef, setConfRef] = useState("");
 
   const [inboxOpen, setInboxOpen] = useState(false);
@@ -214,6 +234,29 @@ export default function Page() {
     if (toastTimer.current) clearTimeout(toastTimer.current);
     toastTimer.current = setTimeout(() => setToastVisible(false), 2200);
   }
+
+  // Seed check-in / check-out with today and tomorrow on first mount so
+  // the booking flow always has valid dates, even if the user never opens
+  // the date pickers. Runs in a client effect (not in useState init) to
+  // avoid SSR hydration mismatches on the date string.
+  useEffect(() => {
+    const fmt = (d: Date) => {
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, "0");
+      const day = String(d.getDate()).padStart(2, "0");
+      return `${y}-${m}-${day}`;
+    };
+    setSearch((s) => {
+      if (s.checkin && s.checkout) return s;
+      const today = new Date();
+      const tomorrow = new Date(today.getTime() + 86_400_000);
+      return {
+        ...s,
+        checkin: s.checkin || fmt(today),
+        checkout: s.checkout || fmt(tomorrow),
+      };
+    });
+  }, []);
 
   useEffect(() => {
     if (search.checkin && search.checkout) {
@@ -237,6 +280,15 @@ export default function Page() {
   const amenitiesLookup = useAsync((signal) => getAmenities(signal), []);
   const sortLookup = useAsync((signal) => getSortOptions(signal), []);
   const bookingStatusesLookup = useAsync((signal) => getBookingStatuses(signal), []);
+  const paymentMethodsLookup = useAsync((signal) => getPaymentMethods(signal), []);
+  // Seed booking.payment with the first available method once the lookup
+  // arrives, so the user lands on Step 2 with a sensible default selected.
+  useEffect(() => {
+    const first = paymentMethodsLookup.data?.[0];
+    if (first && booking.payment === null) {
+      setBooking((b) => ({ ...b, payment: first.id }));
+    }
+  }, [paymentMethodsLookup.data, booking.payment]);
 
   const amenityIds = useMemo<number[] | undefined>(() => {
     const ids = Array.from(filters.amenities);
@@ -332,12 +384,10 @@ export default function Page() {
     setDrawerView("detail");
     setBooking({
       step: 1, guest: null, selectedExtras: new Set(),
-      payment: "card", paymentSent: false, paymentVerified: false,
-      promoDiscount: 0, agentDiscount: 0,
+      payment: null, paymentSent: false, paymentVerified: false,
     });
     setGuestSearchQ("");
-    setNewGuestForm({ first: "", last: "", email: "", phone: "" });
-    setPromoCode("");
+    setNewGuestForm({ first: "", last: "", email: "", countryCode: "20", phone: "" });
   }
   function closeDrawer() { setSelectedProperty(null); }
 
@@ -366,57 +416,120 @@ export default function Page() {
   }
 
   useEffect(() => {
-    const { first, last, email, phone } = newGuestForm;
-    if (first && last && email && phone) {
+    const { first, last, email, countryCode, phone } = newGuestForm;
+    if (first && last && email && countryCode && phone) {
       setBooking((b) => ({
         ...b,
-        guest: { id: "G-NEW", first, last, email, phone, nat: "—", bookings: 0, ltv: "—", isNew: true },
+        guest: { id: "G-NEW", first, last, email, phone, nat: countryCode, bookings: 0, ltv: "—", isNew: true },
       }));
     }
   }, [newGuestForm]);
 
-  function applyPromo(code: string) {
-    setPromoCode(code);
-    const c = code.toUpperCase().trim();
-    const pct = PROMO_CODES[c] || 0;
-    setBooking((b) => ({ ...b, promoDiscount: pct }));
-    if (pct) toast(t.toast.promo(pct));
+  // Two-phase booking: POST /bookings fires in the background when the
+  // user leaves Step 1 (guest selected); POST /booking/confirm fires when
+  // the user finalizes the booking in Step 2. The draft is keyed on the
+  // guest id so changing guest mid-flow correctly creates a fresh draft.
+  const [bookingDraft, setBookingDraft] = useState<{ id: string; ref: string; guestId: string } | null>(null);
+  const draftInFlightRef = useRef(false);
+
+  function describeError(e: unknown, fallback: string): string {
+    if (e instanceof ApiError) return `${e.status ? `${e.status} · ` : ""}${e.message}`;
+    return (e as Error).message || fallback;
   }
 
-  function goStep(s: number) {
-    if (s < 1 || s > 3) return;
-    if (s === 2 && booking.step === 1 && !booking.guest) { toast(t.toast.selectGuestFirst); return; }
-    setBooking((b) => ({ ...b, step: s }));
-  }
-
-  async function confirmBooking(asPending: boolean = false) {
-    if (!selectedProperty || !booking.guest || !totals) return;
+  async function ensureBookingDraft(explicitGuest?: Guest): Promise<string | null> {
+    // The explicit argument lets callers pass a freshly-created guest before
+    // setBooking has propagated to a re-render (otherwise booking.guest is stale).
+    const guest = explicitGuest ?? booking.guest;
+    if (!propertyDetail || !guest) return null;
+    // Guard against empty/invalid dates from the search bar — without this,
+    // `new Date("").toISOString()` below throws "Invalid time value".
+    const checkInMs = search.checkin ? new Date(search.checkin).getTime() : NaN;
+    const checkOutMs = search.checkout ? new Date(search.checkout).getTime() : NaN;
+    if (!Number.isFinite(checkInMs) || !Number.isFinite(checkOutMs)) {
+      toast("Please pick check-in and check-out dates first");
+      return null;
+    }
+    if (bookingDraft && bookingDraft.guestId === guest.id) return bookingDraft.id;
+    if (draftInFlightRef.current) return null;
+    draftInFlightRef.current = true;
     try {
       const created = await createBooking({
         input: {
-          propertyId: selectedProperty.id,
-          guestId: booking.guest.id,
+          propertyId: propertyDetail.id,
+          guestId: guest.id,
           checkIn: new Date(search.checkin).toISOString(),
           checkOut: new Date(search.checkout).toISOString(),
           guests: search.guests,
           adminId,
         },
-        property: selectedProperty,
+        property: propertyDetail,
+        guest,
+        total: totals?.total ?? 0,
+        totalDisplay: `${propertyDetail.currency} ${(totals?.total ?? 0).toLocaleString()}`,
+        pending: true,
+      });
+      const id = created.id ?? created.ref;
+      setBookingDraft({ id, ref: created.ref ?? "", guestId: guest.id });
+      return id;
+    } catch (e) {
+      toast(describeError(e, "Failed to start booking"));
+      return null;
+    } finally {
+      draftInFlightRef.current = false;
+    }
+  }
+
+  async function goStep(s: number, explicitGuest?: Guest) {
+    if (s < 1 || s > 3) return;
+    const guest = explicitGuest ?? booking.guest;
+    if (s === 2 && booking.step === 1 && !guest) { toast(t.toast.selectGuestFirst); return; }
+    // Entering Step 2 from Step 1: create the draft FIRST and block the
+    // transition if the API call fails. The user stays on Step 1 with a
+    // toast and can fix their input / retry.
+    if (s === 2 && booking.step === 1 && guest) {
+      const id = await ensureBookingDraft(guest);
+      if (!id) return;
+    }
+    setBooking((b) => ({ ...b, step: s }));
+  }
+
+  async function confirmBooking(asPending: boolean = false) {
+    if (!propertyDetail || !booking.guest || !totals) return;
+    try {
+      const bookingId = await ensureBookingDraft();
+      if (!bookingId) return;
+      if (asPending) {
+        // The draft already exists on the server; no /confirm call needed.
+        // Prefer the human-readable booking code (R-XXXX) over the UUID.
+        setConfRef(bookingDraft?.ref || bookingId);
+        setBooking((b) => ({ ...b, step: 3 }));
+        toast(t.booking.savedAsPendingToast);
+        return;
+      }
+      if (booking.payment === null) {
+        toast("Select a payment method");
+        return;
+      }
+      const confirmed = await confirmBookingApi({
+        input: {
+          bookingId,
+          paymentMethod: booking.payment,
+          adminId,
+        },
+        property: propertyDetail,
         guest: booking.guest,
         total: totals.total,
-        totalDisplay: `${selectedProperty.currency} ${totals.total.toLocaleString()}`,
-        pending: asPending,
+        totalDisplay: `${propertyDetail.currency} ${totals.total.toLocaleString()}`,
       });
-      setBookings((prev) => [created, ...prev]);
-      setConfRef(created.ref);
+      setBookings((prev) => [confirmed, ...prev]);
+      // Prefer the human-readable booking code (R-XXXX) — the UUID is
+      // shown only as a last resort if neither response carries a code.
+      setConfRef(confirmed.ref || bookingDraft?.ref || bookingId);
       setBooking((b) => ({ ...b, step: 3 }));
-      toast(asPending ? t.booking.savedAsPendingToast : t.toast.bookingConfirmed);
+      toast(t.toast.bookingConfirmed);
     } catch (e) {
-      const msg =
-        e instanceof ApiError
-          ? `${e.status ? `${e.status} · ` : ""}${e.message}`
-          : (e as Error).message || "Failed to create booking";
-      toast(msg);
+      toast(describeError(e, "Failed to confirm booking"));
     }
   }
 
@@ -439,8 +552,8 @@ export default function Page() {
 
   // Booking totals
   const totals = useMemo(() => {
-    if (!selectedProperty) return null;
-    const p = selectedProperty;
+    if (!propertyDetail) return null;
+    const p = propertyDetail;
     const nights = Math.max(1, search.nights);
     const subtotal = p.price * nights;
     const cleaning = p.fees.cleaning;
@@ -453,19 +566,25 @@ export default function Page() {
       if (e.unit.includes("per person/day")) return sum + e.price * nights * search.guests;
       return sum + e.price;
     }, 0);
-    const before = subtotal + cleaning + utilities + bookingFee + extrasTotal;
-    const discPct = booking.promoDiscount + booking.agentDiscount;
-    const disc = Math.round((before * discPct) / 100);
-    const total = before - disc;
+    const total = subtotal + cleaning + utilities + bookingFee + extrasTotal;
     const commission = Math.round(total * 0.05);
-    return { subtotal, cleaning, utilities, bookingFee, extrasTotal, before, discPct, disc, total, commission };
-  }, [selectedProperty, search.nights, search.guests, booking.selectedExtras, booking.promoDiscount, booking.agentDiscount]);
+    return { subtotal, cleaning, utilities, bookingFee, extrasTotal, total, commission };
+  }, [propertyDetail, search.nights, search.guests, booking.selectedExtras]);
 
-  const guestMatches = useMemo(() => {
-    const q = guestSearchQ.toLowerCase().trim();
-    if (!q) return [];
-    return guests.filter((g) => `${g.first} ${g.last} ${g.email} ${g.phone} ${g.id}`.toLowerCase().includes(q));
-  }, [guestSearchQ, guests]);
+  // Live results from /api/reservation-agent/users?query=… The debounce
+  // avoids firing a request on every keystroke.
+  const [guestMatches, setGuestMatches] = useState<Guest[]>([]);
+  useEffect(() => {
+    const q = guestSearchQ.trim();
+    if (!q) { setGuestMatches([]); return; }
+    const ctrl = new AbortController();
+    const id = setTimeout(() => {
+      searchUsers(q, ctrl.signal)
+        .then((rows) => setGuestMatches(rows))
+        .catch((err: Error) => { if (err.name !== "AbortError") setGuestMatches([]); });
+    }, 250);
+    return () => { clearTimeout(id); ctrl.abort(); };
+  }, [guestSearchQ]);
 
   return (
     <div className="app">
@@ -579,7 +698,7 @@ export default function Page() {
         <div className="drawer-head">
           <button className="drawer-close" onClick={closeDrawer}><Icon.X /></button>
           <div className="drawer-title">
-            {drawerView === "detail" ? t.detail.title : selectedProperty ? t.booking.bookHeading(pShortName(selectedProperty, lang)) : ""}
+            {drawerView === "detail" ? t.detail.title : propertyDetail ? t.booking.bookHeading(pShortName(propertyDetail, lang)) : ""}
           </div>
           <div className="drawer-share">
             <button className="icon-btn" title={t.common.share}><Icon.Share /></button>
@@ -587,12 +706,13 @@ export default function Page() {
           </div>
         </div>
         <div className="drawer-body">
-          {selectedProperty && drawerView === "detail" && (
-            <PropertyDetail p={selectedProperty} nights={Math.max(1, search.nights)} toast={toast} t={t} lang={lang} search={search} guests={guests} />
+          {selectedProperty && !propertyDetail && <PropertyDetailSkeleton />}
+          {propertyDetail && drawerView === "detail" && (
+            <PropertyDetail p={propertyDetail} nights={Math.max(1, search.nights)} toast={toast} t={t} lang={lang} search={search} guests={guests} />
           )}
-          {selectedProperty && drawerView === "booking" && (
+          {propertyDetail && drawerView === "booking" && (
             <BookingFlow
-              p={selectedProperty}
+              p={propertyDetail}
               booking={booking}
               setBooking={setBooking}
               search={search}
@@ -603,25 +723,24 @@ export default function Page() {
               newGuestForm={newGuestForm}
               setNewGuestForm={setNewGuestForm}
               selectExtra={selectExtra}
-              applyPromo={applyPromo}
-              promoCode={promoCode}
               totals={totals!}
               goStep={goStep}
               confirmBooking={confirmBooking}
               confRef={confRef}
               closeDrawer={closeDrawer}
+              paymentMethods={paymentMethodsLookup.data ?? []}
               t={t}
               lang={lang}
               toast={toast}
             />
           )}
         </div>
-        {selectedProperty && drawerView === "detail" && totals && (
+        {propertyDetail && drawerView === "detail" && totals && (
           <div className="drawer-foot" style={{ display: "flex" }}>
             <div className="drawer-foot-price">
-              <b>{selectedProperty.currency} {totals.total.toLocaleString()}</b>
+              <b>{propertyDetail.currency} {totals.total.toLocaleString()}</b>
               <span>{t.detail.nightsTotal}</span>
-              <small>{t.detail.inclusive(selectedProperty.currency, selectedProperty.price.toLocaleString(), Math.max(1, search.nights))}</small>
+              <small>{t.detail.inclusive(propertyDetail.currency, propertyDetail.price.toLocaleString(), Math.max(1, search.nights))}</small>
             </div>
             <button className="btn btn-primary btn-lg" onClick={startBooking}>{t.common.continueBooking}</button>
           </div>
@@ -917,6 +1036,10 @@ function Topbar({
   t: typeof DICT["en"];
   lang: Lang;
 }) {
+  const [guestsDropdown, setGuestsDropdown] = useState(false);
+  function adjustGuests(delta: number) {
+    setSearch((s) => ({ ...s, guests: Math.max(0, Math.min(20, s.guests + delta)) }));
+  }
   return (
     <div className="topbar">
       <div className="search-pill" style={{ position: "relative" }}>
@@ -978,15 +1101,54 @@ function Topbar({
             onChange={(e) => setSearch((s) => ({ ...s, checkout: e.target.value }))}
           />
         </div>
-        <div className="search-field">
+        <div className="search-field" style={{ position: "relative" }}>
           <div className="search-field-label">{t.topbar.who}</div>
           <input
             type="text"
             className="search-field-input"
             placeholder={t.topbar.whoPlaceholder}
             readOnly
+            style={{ cursor: "pointer" }}
             value={search.guests > 0 ? t.topbar.addGuests(search.guests) : ""}
+            onClick={() => setGuestsDropdown((v) => !v)}
           />
+          {guestsDropdown && (
+            <>
+              <div
+                style={{ position: "fixed", inset: 0, zIndex: 24 }}
+                onClick={() => setGuestsDropdown(false)}
+              />
+              <div
+                className="search-dropdown show"
+                style={{ minWidth: 240, padding: 14, zIndex: 26 }}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="counter-row">
+                  <div>
+                    <div style={{ fontWeight: 500, fontSize: 13 }}>{t.topbar.who}</div>
+                    <div style={{ fontSize: 11, color: "var(--muted)" }}>
+                      {t.topbar.whoPlaceholder}
+                    </div>
+                  </div>
+                  <div className="counter-controls">
+                    <button
+                      type="button"
+                      className="counter-btn"
+                      onClick={() => adjustGuests(-1)}
+                      disabled={search.guests <= 0}
+                    >−</button>
+                    <span className="counter-val">{search.guests}</span>
+                    <button
+                      type="button"
+                      className="counter-btn"
+                      onClick={() => adjustGuests(1)}
+                      disabled={search.guests >= 20}
+                    >+</button>
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
         </div>
         <button className="search-go" onClick={onSearch} title={t.results.sortRecommended}>
           <Icon.Search size={16} style={{ strokeWidth: 2.5 }} />
@@ -1264,6 +1426,28 @@ function PropertyCard({
 /* ============================================================
    PROPERTY DETAIL
 ============================================================ */
+function PropertyDetailSkeleton() {
+  return (
+    <>
+      <div className="pd-skel hero" />
+      <div className="pd-section">
+        <div className="pd-skel line medium" />
+        <div className="pd-skel line short" />
+        <div className="pd-skel line long" style={{ marginTop: 14 }} />
+      </div>
+      <div className="pd-section">
+        <div className="pd-skel line long" />
+        <div className="pd-skel line long" />
+        <div className="pd-skel line medium" />
+      </div>
+      <div className="pd-section">
+        <div className="pd-skel line short" />
+        <div className="pd-skel line medium" />
+      </div>
+    </>
+  );
+}
+
 function PropertyDetail({
   p, nights, toast, t, lang, search, guests,
 }: {
@@ -1277,6 +1461,19 @@ function PropertyDetail({
   const ownerFirst = p.owner.name.split(" ")[0];
   const ownerMessage = t.detail.waMsg(ownerFirst, pName(p, lang));
 
+  const photos = p.photos ?? [];
+  const [activePhotoIdx, setActivePhotoIdx] = useState(0);
+  useEffect(() => { setActivePhotoIdx(0); }, [p.id]);
+  const activePhoto = photos[activePhotoIdx] ?? photos[0];
+  const thumbsRef = useRef<HTMLDivElement | null>(null);
+  // Keep the active thumbnail in view when the user pages with the arrows.
+  useEffect(() => {
+    const el = thumbsRef.current?.children[activePhotoIdx] as HTMLElement | undefined;
+    el?.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
+  }, [activePhotoIdx]);
+  function nextPhoto() { if (photos.length) setActivePhotoIdx((i) => (i + 1) % photos.length); }
+  function prevPhoto() { if (photos.length) setActivePhotoIdx((i) => (i - 1 + photos.length) % photos.length); }
+
   // ---- Quote dialog state ----
   const [quoteOpen, setQuoteOpen] = useState(false);
   const [quoteGuestSearch, setQuoteGuestSearch] = useState("");
@@ -1287,11 +1484,18 @@ function PropertyDetail({
     () => `QTE-${p.id}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`,
     [p.id, quoteOpen],
   );
-  const quoteGuestMatches = useMemo(() => {
-    const q = quoteGuestSearch.toLowerCase().trim();
-    if (!q) return [];
-    return guests.filter((g) => `${g.first} ${g.last} ${g.email} ${g.phone} ${g.id}`.toLowerCase().includes(q));
-  }, [quoteGuestSearch, guests]);
+  const [quoteGuestMatches, setQuoteGuestMatches] = useState<Guest[]>([]);
+  useEffect(() => {
+    const q = quoteGuestSearch.trim();
+    if (!q) { setQuoteGuestMatches([]); return; }
+    const ctrl = new AbortController();
+    const id = setTimeout(() => {
+      searchUsers(q, ctrl.signal)
+        .then((rows) => setQuoteGuestMatches(rows))
+        .catch((err: Error) => { if (err.name !== "AbortError") setQuoteGuestMatches([]); });
+    }, 250);
+    return () => { clearTimeout(id); ctrl.abort(); };
+  }, [quoteGuestSearch]);
 
   // Quote calculations (same fee structure as booking)
   const qSubtotal = p.price * nights;
@@ -1346,13 +1550,39 @@ function PropertyDetail({
   return (
     <>
       <div className={`pd-hero ${p.country === "egypt" ? "egypt" : ""}`}>
-        <div style={{ fontSize: 13 }}>{pName(p, lang)}</div>
-        <div className="pd-photo-count"><Icon.Image /> 12 {t.common.photos}</div>
-        <div className="pd-hero-thumbs">
-          <div className="pd-thumb active" />
-          <div className="pd-thumb" />
-          <div className="pd-thumb" />
-        </div>
+        {activePhoto ? (
+          <img className="pd-hero-img" src={activePhoto} alt={pName(p, lang)} />
+        ) : (
+          <div style={{ fontSize: 13 }}>{pName(p, lang)}</div>
+        )}
+        {photos.length > 1 && (
+          <>
+            <button className="pd-hero-nav prev" onClick={prevPhoto} aria-label="Previous photo">
+              <Icon.ChevronDown style={{ transform: "rotate(90deg)" }} />
+            </button>
+            <button className="pd-hero-nav next" onClick={nextPhoto} aria-label="Next photo">
+              <Icon.ChevronDown style={{ transform: "rotate(-90deg)" }} />
+            </button>
+          </>
+        )}
+        {photos.length > 0 && (
+          <div className="pd-photo-count">
+            <Icon.Image /> {activePhotoIdx + 1} / {photos.length}
+          </div>
+        )}
+        {photos.length > 1 && (
+          <div className="pd-hero-thumbs" ref={thumbsRef}>
+            {photos.map((src, idx) => (
+              <button
+                key={src + idx}
+                className={`pd-thumb ${idx === activePhotoIdx ? "active" : ""}`}
+                style={{ backgroundImage: `url(${src})` }}
+                onClick={() => setActivePhotoIdx(idx)}
+                aria-label={`Photo ${idx + 1}`}
+              />
+            ))}
+          </div>
+        )}
       </div>
 
       {!p.instantBook ? (
@@ -1622,16 +1852,15 @@ function PropertyDetail({
 ============================================================ */
 interface Totals {
   subtotal: number; cleaning: number; utilities: number; bookingFee: number;
-  extrasTotal: number; before: number; discPct: number; disc: number;
-  total: number; commission: number;
+  extrasTotal: number; total: number; commission: number;
 }
 
 function BookingFlow({
   p, booking, setBooking, search,
   guestSearchQ, setGuestSearchQ, guestMatches, selectExistingGuest,
   newGuestForm, setNewGuestForm,
-  selectExtra, applyPromo, promoCode, totals, goStep,
-  confirmBooking, confRef, closeDrawer, t, lang, toast,
+  selectExtra, totals, goStep,
+  confirmBooking, confRef, closeDrawer, paymentMethods, t, lang, toast,
 }: {
   p: Property;
   booking: BookingState;
@@ -1641,50 +1870,87 @@ function BookingFlow({
   setGuestSearchQ: (s: string) => void;
   guestMatches: Guest[];
   selectExistingGuest: (g: Guest) => void;
-  newGuestForm: { first: string; last: string; email: string; phone: string };
-  setNewGuestForm: React.Dispatch<React.SetStateAction<{ first: string; last: string; email: string; phone: string }>>;
+  newGuestForm: { first: string; last: string; email: string; countryCode: string; phone: string };
+  setNewGuestForm: React.Dispatch<React.SetStateAction<{ first: string; last: string; email: string; countryCode: string; phone: string }>>;
   selectExtra: (id: string) => void;
-  applyPromo: (s: string) => void;
-  promoCode: string;
   totals: Totals;
-  goStep: (s: number) => void;
-  confirmBooking: (asPending?: boolean) => void;
+  goStep: (s: number, explicitGuest?: Guest) => Promise<void>;
+  confirmBooking: (asPending?: boolean) => Promise<void>;
   confRef: string;
   closeDrawer: () => void;
+  paymentMethods: LookupItem[];
   t: typeof DICT["en"];
   lang: Lang;
   toast: (msg: string) => void;
 }) {
   const s = booking.step;
   const stepLabels = [t.booking.steps.guest, t.booking.steps.payment, t.booking.steps.confirm];
-  const payMethods: Array<"card" | "paylink" | "instapay"> = ["card", "paylink", "instapay"];
+  // Single submit gate for the 3 API-driven buttons in this flow.
+  // `kind` lets each button show its own spinner while sharing the lock.
+  const { submitting, submit } = useSubmitting<"continue" | "confirm" | "saveAsPending">();
+
+  const selectedMethod = paymentMethods.find((m) => m.id === booking.payment) ?? null;
+  // The InstaPay flow shows a handle for manual transfer; everything else
+  // is treated as a hosted payment-link gateway (Paymob, etc.).
+  const isInstapay = (selectedMethod?.name ?? "").toLowerCase().includes("instapay");
+
+  // When the user clicks Next on the Guest step, if they typed a new
+  // guest in the "OR CREATE NEW" form (placeholder id "G-NEW"), create
+  // them via POST /api/reservation-agent/users first, then advance.
+  async function proceedFromGuest() {
+    if (!booking.guest) {
+      toast(t.toast.selectGuestFirst);
+      return;
+    }
+    if (booking.guest.id !== "G-NEW") {
+      goStep(2);
+      return;
+    }
+    const f = newGuestForm;
+    // The CountryCode field has its own input now; just strip a leading "+"
+    // and any whitespace. The phone field is the local number only.
+    const countryCode = f.countryCode.replace(/[^\d]/g, "");
+    const phoneNumber = f.phone.replace(/\s+/g, "");
+    if (!countryCode) {
+      toast("Country code is required");
+      return;
+    }
+    try {
+      const created = await createUser({
+        createByPhone: true,
+        email: f.email,
+        firstName: f.first,
+        lastName: f.last,
+        countryCode,
+        phone: phoneNumber,
+      });
+      setBooking((b) => ({ ...b, guest: created }));
+      // Pass the just-created guest explicitly — booking.guest in the parent
+      // is still stale (G-NEW) at this point until React flushes setBooking.
+      await goStep(2, created);
+    } catch (e) {
+      const msg = e instanceof ApiError
+        ? `${e.status ? `${e.status} · ` : ""}${e.message}`
+        : (e as Error).message || "Failed to create guest";
+      toast(msg);
+    }
+  }
 
   // Build a draft booking reference for payment links
   const draftRef = `HSI-${p.id}-${Date.now().toString(36).slice(-5).toUpperCase()}`;
-  const paymentLinks = {
-    card: `https://pay.houseiana.com.eg/visa/${draftRef}`,
-    paylink: `https://pay.paymob.com/houseiana/${draftRef}`,
-    instapay: t.booking.instapayHandle,
-  };
+  const gatewayLink = `https://pay.paymob.com/houseiana/${draftRef}`;
 
-  function selectMethod(m: typeof booking.payment) {
-    setBooking((b) => ({ ...b, payment: m, paymentSent: false, paymentVerified: false }));
+  function selectMethod(id: number) {
+    setBooking((b) => ({ ...b, payment: id, paymentSent: false, paymentVerified: false }));
   }
 
   function buildWAMessage(): string {
     const g = booking.guest!;
     const amount = totals.total.toLocaleString();
-    const nights = Math.max(1, search.nights);
-    if (booking.payment === "card") {
-      return t.booking.waCardMsg(
-        g.first, pShortName(p, lang), formatDate(search.checkin), formatDate(search.checkout),
-        nights, search.guests, p.currency, amount, paymentLinks.card,
-      );
+    if (isInstapay) {
+      return t.booking.waInstapayMsg(g.first, pShortName(p, lang), p.currency, amount, t.booking.instapayHandle);
     }
-    if (booking.payment === "paylink") {
-      return t.booking.waPaylinkMsg(g.first, pShortName(p, lang), p.currency, amount, paymentLinks.paylink);
-    }
-    return t.booking.waInstapayMsg(g.first, pShortName(p, lang), p.currency, amount, t.booking.instapayHandle);
+    return t.booking.waPaylinkMsg(g.first, pShortName(p, lang), p.currency, amount, gatewayLink);
   }
 
   function sendPaymentWA() {
@@ -1709,19 +1975,19 @@ function BookingFlow({
   }
   const hasPhone = !!booking.guest?.phone;
   const hasEmail = !!booking.guest?.email;
-  const helpText =
-    booking.payment === "card" ? t.booking.cardHelp
-    : booking.payment === "paylink" ? t.booking.paylinkHelp
-    : t.booking.instapayHelp;
+  const helpText = isInstapay ? t.booking.instapayHelp : t.booking.paylinkHelp;
   return (
-    <>
+    <div style={{ minHeight: "100%", display: "flex", flexDirection: "column" }}>
       <div className="steps-bar">
         {stepLabels.map((label, i) => {
           const n = i + 1;
+          const done = s > n;
           return (
             <span key={n} style={{ display: "contents" }}>
-              <div className={`step-item ${s === n ? "active" : s > n ? "done" : ""}`}>
-                <div className="step-num">{n}</div>
+              <div className={`step-item ${s === n ? "active" : done ? "done" : ""}`}>
+                <div className="step-num">
+                  {done ? <Icon.Check size={14} /> : n}
+                </div>
                 <span>{label}</span>
               </div>
               {i < 2 && <div className="step-line" />}
@@ -1758,14 +2024,13 @@ function BookingFlow({
                       <div className="guest-row-name">{g.first} {g.last}</div>
                       <div className="guest-row-meta">{g.email} · {g.phone}</div>
                     </div>
-                    <div className="guest-row-stats"><b>{t.booking.bookingsCount(g.bookings)}</b>{g.ltv}</div>
                   </div>
                 ))
               )}
             </div>
           )}
           <div className="or-divider">{t.booking.orNew}</div>
-          <div className="field-row col-2">
+          <div className="field-row col-1">
             <div>
               <label className="label">{t.booking.firstName} <span className="req">*</span></label>
               <input type="text" className="input"
@@ -1773,7 +2038,7 @@ function BookingFlow({
                 onChange={(e) => setNewGuestForm((f) => ({ ...f, first: e.target.value }))}
               />
             </div>
-            <div>
+            <div style={{ marginBottom: 12 }}>
               <label className="label">{t.booking.lastName} <span className="req">*</span></label>
               <input type="text" className="input"
                 value={newGuestForm.last}
@@ -1781,7 +2046,7 @@ function BookingFlow({
               />
             </div>
           </div>
-          <div className="field-row col-2">
+          <div className="field-row col-1">
             <div>
               <label className="label">{t.booking.email} <span className="req">*</span></label>
               <input type="email" className="input" placeholder="guest@email.com"
@@ -1791,10 +2056,33 @@ function BookingFlow({
             </div>
             <div>
               <label className="label">{t.booking.phone} <span className="req">*</span></label>
-              <input type="tel" className="input" placeholder="+20 1xx xxx xxxx"
-                value={newGuestForm.phone}
-                onChange={(e) => setNewGuestForm((f) => ({ ...f, phone: e.target.value }))}
-              />
+              <div style={{ display: "flex", gap: 6 }}>
+                <div style={{ position: "relative", flex: "0 0 90px" }}>
+                  <span style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", color: "var(--muted)", fontSize: 13, pointerEvents: "none" }}>+</span>
+                  <input
+                    type="tel"
+                    className="input"
+                    placeholder="20"
+                    style={{ paddingLeft: 20 }}
+                    value={newGuestForm.countryCode}
+                    onChange={(e) => setNewGuestForm((f) => ({ ...f, countryCode: e.target.value.replace(/[^\d]/g, "") }))}
+                  />
+                </div>
+                <input
+                  type="tel"
+                  inputMode="numeric"
+                  className="input"
+                  placeholder="1xx xxx xxxx"
+                  style={{ flex: 1 }}
+                  value={newGuestForm.phone}
+                  onChange={(e) => {
+                    // Digits only; cap at 11 if it starts with 0, otherwise 10.
+                    const digits = e.target.value.replace(/\D/g, "");
+                    const max = digits.startsWith("0") ? 11 : 10;
+                    setNewGuestForm((f) => ({ ...f, phone: digits.slice(0, max) }));
+                  }}
+                />
+              </div>
             </div>
           </div>
         </div>
@@ -1802,24 +2090,6 @@ function BookingFlow({
 
       <div className={`booking-step ${s === 2 ? "active" : ""}`}>
         <div className="pd-section">
-          <div className="field-row col-2">
-            <div>
-              <label className="label">{t.booking.promoLabel}</label>
-              <input type="text" className="input" placeholder={t.booking.promoPlaceholder}
-                value={promoCode}
-                onChange={(e) => applyPromo(e.target.value)}
-              />
-            </div>
-            <div>
-              <label className="label">{t.booking.agentDiscount}</label>
-              <input type="number" className="input" min={0} max={20}
-                value={booking.agentDiscount}
-                onChange={(e) => setBooking((b) => ({ ...b, agentDiscount: Math.min(20, Math.max(0, parseInt(e.target.value) || 0)) }))}
-              />
-              <div className="help">{t.booking.agentDiscountHelp}</div>
-            </div>
-          </div>
-
           {/* SECURITY WARNING */}
           <div className="security-warn">
             <div className="security-warn-icon">
@@ -1836,23 +2106,23 @@ function BookingFlow({
           </div>
 
           <h3>{t.booking.paymentMethod}</h3>
-          {payMethods.map((m) => {
-            const info = t.booking.payments[m];
-            return (
+          {paymentMethods.length === 0 ? (
+            <div style={{ padding: 12, color: "var(--muted)", fontSize: 12 }}>Loading payment methods…</div>
+          ) : (
+            paymentMethods.map((m) => (
               <div
-                key={m}
-                className={`pay-method ${booking.payment === m ? "selected" : ""}`}
-                onClick={() => selectMethod(m)}
+                key={m.id}
+                className={`pay-method ${booking.payment === m.id ? "selected" : ""}`}
+                onClick={() => selectMethod(m.id)}
               >
                 <div className="pay-radio" />
                 <div className="pay-info">
-                  <div className="pay-name">{info.name}</div>
-                  <div className="pay-desc">{info.desc}</div>
+                  <div className="pay-name">{m.name}</div>
                 </div>
-                <div className="pay-logo">{info.logo}</div>
+                <div className="pay-logo">{m.name.toUpperCase()}</div>
               </div>
-            );
-          })}
+            ))
+          )}
 
           {/* ACTION PANEL */}
           <div className="pay-actions">
@@ -1870,7 +2140,7 @@ function BookingFlow({
 
             <div className="pay-help">{helpText}</div>
 
-            {booking.payment === "instapay" && (
+            {isInstapay && (
               <div className="instapay-box">
                 <div style={{ flex: 1 }}>
                   <small>{t.booking.instapayHandleLabel}</small>
@@ -1920,17 +2190,11 @@ function BookingFlow({
             {totals.extrasTotal > 0 && (
               <div className="sum-row"><span>{t.booking.extras} ({booking.selectedExtras.size})</span><b>{p.currency} {totals.extrasTotal.toLocaleString()}</b></div>
             )}
-            {totals.disc > 0 && (
-              <div className="sum-row" style={{ color: "var(--green)" }}>
-                <span>{t.common.discount} ({totals.discPct}%)</span>
-                <b style={{ color: "var(--green)" }}>−{p.currency} {totals.disc.toLocaleString()}</b>
-              </div>
-            )}
             <div className="sum-divider" />
             <div className="sum-total">
               <div className="sum-total-row">
                 <span>{t.booking.paymentMethod}</span>
-                <b>{t.booking.paymentLabel[booking.payment]}</b>
+                <b>{selectedMethod?.name ?? "—"}</b>
               </div>
               <div className="sum-total-row">
                 <span>{t.booking.commission}</span>
@@ -2031,7 +2295,7 @@ function BookingFlow({
       </div>
 
       {s !== 3 && (
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 22px", borderTop: "1px solid var(--line)", background: "#fff", position: "sticky", bottom: 0, gap: 8, flexWrap: "wrap" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 22px", borderTop: "1px solid var(--line)", background: "#fff", position: "sticky", bottom: 0, marginTop: "auto", gap: 8, flexWrap: "wrap" }}>
           <button className="btn btn-secondary" disabled={s === 1} onClick={() => goStep(s - 1)}>{t.common.back}</button>
           <div style={{ fontSize: 12, color: "var(--muted)" }}>
             {t.common.step} <b>{s}</b> {t.common.of} 3
@@ -2040,26 +2304,32 @@ function BookingFlow({
             {s === 2 && booking.paymentSent && !booking.paymentVerified && (
               <button
                 className="btn btn-secondary"
-                onClick={() => confirmBooking(true)}
+                disabled={!!submitting}
+                onClick={() => void submit("saveAsPending", () => confirmBooking(true))}
                 title={t.booking.saveAndHoldBtn}
               >
-                ⏱ {t.booking.saveAndHoldBtn}
+                {submitting === "saveAsPending"
+                  ? <><span className="spinner-sm" />&nbsp;{t.booking.saveAndHoldBtn}</>
+                  : <>⏱ {t.booking.saveAndHoldBtn}</>}
               </button>
             )}
             <button
               className="btn btn-primary"
-              disabled={s === 2 && !booking.paymentVerified}
+              disabled={(s === 2 && !booking.paymentVerified) || !!submitting}
               onClick={() => {
-                if (s === 2) confirmBooking(false);
-                else goStep(s + 1);
+                if (s === 2) { void submit("confirm", () => confirmBooking(false)); return; }
+                if (s === 1) { void submit("continue", proceedFromGuest); return; }
+                void goStep(s + 1);
               }}
             >
-              {s === 2 ? t.common.confirmBooking : t.common.next}
+              {submitting === "continue" || submitting === "confirm"
+                ? <><span className="spinner-sm" />&nbsp;{s === 2 ? t.common.confirmBooking : t.common.next}</>
+                : (s === 2 ? t.common.confirmBooking : t.common.next)}
             </button>
           </div>
         </div>
       )}
-    </>
+    </div>
   );
 }
 

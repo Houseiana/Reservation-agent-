@@ -20,3 +20,4 @@ export * from "./resources/inbox";
 export * from "./resources/payments";
 export * from "./resources/kpis";
 export * from "./resources/lookups";
+export * from "./resources/users";
