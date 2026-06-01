@@ -383,7 +383,7 @@ function extractPhotos(r: Record<string, unknown>): string[] {
  * itself. Phone gets the country-code prefix when both pieces are
  * returned separately.
  */
-function extractOwner(r: Record<string, unknown>): Property["owner"] {
+export function extractOwner(r: Record<string, unknown>): Property["owner"] {
   const nested =
     (r.owner && typeof r.owner === "object" ? (r.owner as Record<string, unknown>) : null) ??
     (r.host && typeof r.host === "object" ? (r.host as Record<string, unknown>) : null) ??

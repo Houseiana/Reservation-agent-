@@ -1,5 +1,6 @@
 import { api } from "../client";
 import { ENDPOINTS } from "../endpoints";
+import { extractOwner } from "./properties";
 import type { Booking, Guest, Property, Paginated } from "../types";
 
 export interface BookingListParams {
@@ -271,7 +272,7 @@ function mapBooking(raw: unknown): Booking {
     extras: [],
     fees: { cleaning: 0, utilities: 0, bookingFeePct: 0, deposit: 0 },
     policies: { checkin: "—", checkout: "—", minNights: 1, cancel: "—" },
-    owner: { name: "—", phone: "", whatsapp: "", responseTime: "—" },
+    owner: extractBookingOwner(r),
   };
 
   return {
@@ -292,6 +293,23 @@ function mapBooking(raw: unknown): Booking {
     refundStatus: "none",
     holdUntil: null,
   };
+}
+
+/**
+ * Pull the property owner's name/phone out of a booking payload. The
+ * backend may carry owner fields at the top level (ownerName / ownerPhone /
+ * hostName / hostPhone …) or nest them under a `property` object. Reuses
+ * the property mapper's owner extraction so the field-name variants stay
+ * in one place. Returns the "—"/empty placeholder when nothing is found.
+ */
+function extractBookingOwner(r: Record<string, unknown>): Property["owner"] {
+  const top = extractOwner(r);
+  if (top.name !== "—" || top.phone) return top;
+  if (r.property && typeof r.property === "object") {
+    const nested = extractOwner(r.property as Record<string, unknown>);
+    if (nested.name !== "—" || nested.phone) return nested;
+  }
+  return top;
 }
 
 function mapStatus(s: string): Booking["status"] {
