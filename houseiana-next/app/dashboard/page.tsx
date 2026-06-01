@@ -1531,13 +1531,8 @@ function PropertyCard({
         {p.coverPhoto && (
           <img className="property-img-cover" src={p.coverPhoto} alt={pName(p, lang)} />
         )}
-        <span className="property-tag">{p.tier === "luxury" ? t.common.luxury : t.common.standard}</span>
-        <span
-          className={`property-fav ${isFav ? "active" : ""}`}
-          onClick={(e) => { e.stopPropagation(); onFav(); }}
-        >
-          <Icon.Heart size={13} />
-        </span>
+        <span className="property-tag">{p.type}</span>
+        
         {onHold && (
           <div className="property-hold">
             <div>
