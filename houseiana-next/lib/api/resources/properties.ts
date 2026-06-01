@@ -218,6 +218,10 @@ function mapProperty(raw: unknown): Property {
     policies: extractPolicies(r),
     owner: extractOwner(r),
     photos,
+    // Promote the first image to coverPhoto — the property card renders
+    // p.coverPhoto, and extractPhotos already collapses the backend's
+    // coverPhoto/thumbnail/etc. into photos[0] for the list endpoint.
+    coverPhoto: photos[0],
     pricing: extractPricing(r),
   };
 }
