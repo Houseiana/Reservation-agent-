@@ -193,6 +193,9 @@ export default function Page() {
   const [whereDropdown, setWhereDropdown] = useState(false);
   // Mobile drawer state — desktop ignores these because CSS shows sidebar/filters inline.
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  // Desktop-only: collapse the sidebar to widen the workspace. Ignored on
+  // mobile, where the sidebar is a drawer driven by sidebarOpen.
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [rtl, setRtl] = useState(false);
   const lang: Lang = rtl ? "ar" : "en";
@@ -640,15 +643,30 @@ export default function Page() {
   }, [guestSearchQ]);
 
   return (
-    <div className="app">
+    <div className={`app ${sidebarCollapsed ? "sidebar-collapsed" : ""}`}>
       <Sidebar
         page={page}
         setPage={(p) => { setPage(p); setSidebarOpen(false); }}
         simulateCall={simulateIncomingCall}
         bookingsCount={bookingsResult.data?.total}
         open={sidebarOpen}
+        onCollapse={() => setSidebarCollapsed(true)}
         t={t}
       />
+      {/* Desktop-only: re-open the collapsed sidebar. Hidden unless
+          .app.sidebar-collapsed is set; CSS keeps it off on mobile. */}
+      <button
+        className="desktop-sidebar-reopen"
+        onClick={() => setSidebarCollapsed(false)}
+        aria-label="Open sidebar"
+        title="Open sidebar"
+      >
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <line x1="3" y1="6" x2="21" y2="6" />
+          <line x1="3" y1="12" x2="21" y2="12" />
+          <line x1="3" y1="18" x2="21" y2="18" />
+        </svg>
+      </button>
       {/* Mobile-only floating buttons + backdrop. Hidden on desktop via CSS. */}
       <button
         className="mobile-toggle nav-toggle"
@@ -804,7 +822,7 @@ export default function Page() {
             </div>
           </section>
 
-          <section className={`page ${page === "bookings" ? "active" : ""}`} id="page-bookings" style={{ padding: 24, flexDirection: "column", overflowY: "auto", height: "100%", flex: 1, minHeight: 0 }}>
+          <section className={`page ${page === "bookings" ? "active" : ""}`} id="page-bookings" style={{ padding: 16, flexDirection: "column", overflowY: "auto", height: "100%", flex: 1, minHeight: 0 }}>
             <BookingsPage
               goToSearch={() => setPage("search")}
               t={t}
@@ -816,11 +834,11 @@ export default function Page() {
             />
           </section>
 
-          <section className={`page ${page === "kpis" ? "active" : ""}`} id="page-kpis" style={{ padding: 24, flexDirection: "column", overflowY: "auto", height: "100%", flex: 1, minHeight: 0 }}>
+          <section className={`page ${page === "kpis" ? "active" : ""}`} id="page-kpis" style={{ padding: 16, flexDirection: "column", overflowY: "auto", height: "100%", flex: 1, minHeight: 0 }}>
             <KpisPage t={t} />
           </section>
 
-          <section className={`page ${page === "guests" ? "active" : ""}`} id="page-guests" style={{ padding: 24, flexDirection: "column", overflowY: "auto", height: "100%", flex: 1, minHeight: 0 }}>
+          <section className={`page ${page === "guests" ? "active" : ""}`} id="page-guests" style={{ padding: 16, flexDirection: "column", overflowY: "auto", height: "100%", flex: 1, minHeight: 0 }}>
             <GuestsPage t={t} guests={guests} loading={guestsResult.loading} onOpenGuest={(id) => setSelectedGuestId(id)} />
           </section>
         </div>
@@ -1068,11 +1086,10 @@ function SignedInAgentCard({ t }: { t: typeof DICT["en"] }) {
     ?? user?.username
     ?? user?.primaryEmailAddress?.emailAddress
     ?? "—";
-  const initials = (user?.firstName?.[0] ?? "") + (user?.lastName?.[0] ?? "");
 
   return (
     <div className="agent-card">
-      <div className="agent-avatar">{initials || name.slice(0, 2).toUpperCase()}</div>
+      <img className="agent-avatar" src="/logo.png" alt="" />
       <div className="agent-info">
         <div className="agent-name">{isLoaded ? name : "…"}</div>
         <div className="agent-role">{t.nav.role}</div>
@@ -1091,6 +1108,7 @@ function Sidebar({
   simulateCall,
   bookingsCount,
   open,
+  onCollapse,
   t,
 }: {
   page: PageKey;
@@ -1100,18 +1118,28 @@ function Sidebar({
   bookingsCount: number | undefined;
   /** Mobile-only — controls the drawer slide. Ignored on desktop layout. */
   open: boolean;
+  /** Desktop-only — collapse the sidebar to widen the workspace. */
+  onCollapse: () => void;
   t: typeof DICT["en"];
 }) {
   return (
     <aside className={`sidebar ${open ? "open" : ""}`}>
       <div className="brand">
-        <div className="brand-mark">H</div>
-        <div>
-          <div className="brand-name">Houseiana</div>
-          <div className="brand-sub">{t.kpis.subtitle.includes("·") ? "Agent Console" : "Agent Console"}</div>
+        <div className="brand-logo-wrap">
+          <img className="brand-logo" src="/full_logo.png" alt="Houseiana" />
+          <div className="brand-sub">Agent Console</div>
         </div>
+        <button
+          className="sidebar-collapse-btn"
+          onClick={onCollapse}
+          aria-label="Collapse sidebar"
+          title="Collapse sidebar"
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M15 18l-6-6 6-6" />
+          </svg>
+        </button>
       </div>
-      <SignedInAgentCard t={t} />
       <div style={{ margin: "0 14px 6px", display: "flex", gap: 6 }}>
         <div className="ch-pill" title="WhatsApp Business connected">
           <Icon.WhatsApp size={11} />
@@ -1155,6 +1183,7 @@ function Sidebar({
         </button>
         */}
       </nav>
+      <SignedInAgentCard t={t} />
       <div className="sidebar-foot">v2.4.1 · © Houseiana 2026</div>
     </aside>
   );
@@ -1187,12 +1216,34 @@ function Topbar({
   lang: Lang;
 }) {
   const [guestsDropdown, setGuestsDropdown] = useState(false);
+  // Mobile only: the multi-field pill collapses into a compact summary bar
+  // that opens the full (stacked) search as a top sheet. Desktop ignores this.
+  const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   function adjustGuests(delta: number) {
     setSearch((s) => ({ ...s, guests: Math.max(1, Math.min(20, s.guests + delta)) }));
   }
+  const searchSummary = [
+    search.where || t.topbar.searchPlaceholder,
+    `${formatDateShort(search.checkin)} – ${formatDateShort(search.checkout)}`,
+    t.topbar.addGuests(search.guests),
+  ].join(" · ");
   return (
     <div className="topbar">
-      <div className="search-pill" style={{ position: "relative" }}>
+      {/* Mobile-only brand mark, centred between the fixed menu + filter
+          buttons; the search bar sits on the row below (see CSS). */}
+      <img className="topbar-logo" src="/full_logo.png" alt="Houseiana" />
+      <button
+        type="button"
+        className="mobile-search-summary"
+        onClick={() => setMobileSearchOpen(true)}
+      >
+        <Icon.Search size={15} />
+        <span className="mss-text">{searchSummary}</span>
+      </button>
+      {mobileSearchOpen && (
+        <div className="mobile-search-backdrop" onClick={() => setMobileSearchOpen(false)} />
+      )}
+      <div className={`search-pill ${mobileSearchOpen ? "mobile-open" : ""}`}>
         <div className="search-field" id="whereField">
           <div className="search-field-label">{t.topbar.where}</div>
           <input
@@ -1300,8 +1351,13 @@ function Topbar({
             </>
           )}
         </div>
-        <button className="search-go" onClick={onSearch} title={t.results.sortRecommended}>
+        <button
+          className="search-go"
+          onClick={() => { onSearch(); setMobileSearchOpen(false); }}
+          title={t.nav.search}
+        >
           <Icon.Search size={16} style={{ strokeWidth: 2.5 }} />
+          <span className="search-go-label">{t.nav.search}</span>
         </button>
       </div>
       <div className="topbar-right">
@@ -3670,21 +3726,21 @@ function GuestsPage({
           <div style={{ fontSize: 22, fontWeight: 600, letterSpacing: "-.2px" }}>{t.guestsPage.title}</div>
           <div style={{ color: "var(--muted)", fontSize: 13, marginTop: 3 }}>{t.guestsPage.subtitle}</div>
         </div>
-        <div style={{ display: "flex", gap: 8 }}>
-          <div style={{ position: "relative" }}>
+        <div className="guest-actions" style={{ display: "flex", gap: 8 }}>
+          <div className="guest-search-box" style={{ position: "relative" }}>
             <Icon.Search size={14} style={{ position: "absolute", left: 11, top: "50%", transform: "translateY(-50%)", color: "var(--muted)" }} />
             <input type="text" className="input" placeholder={t.guestsPage.searchPlaceholder} style={{ paddingLeft: 34, width: 240 }} />
           </div>
           <button className="btn btn-primary btn-sm">{t.guestsPage.addGuest}</button>
         </div>
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 14, marginBottom: 20 }}>
+      <div className="guest-stats" style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 14, marginBottom: 20 }}>
         <div className="stat-card sm"><div className="stat-card-label">{t.guestsPage.stats.total}</div><div className="stat-card-value sm">2,847</div><div className="stat-card-meta"><span className="trend up">↑ 142</span><span>{t.guestsPage.stats.thisMonth}</span></div></div>
         <div className="stat-card sm"><div className="stat-card-label">{t.guestsPage.stats.repeat}</div><div className="stat-card-value sm">31%</div><div className="stat-card-meta"><span className="trend up">↑ 4 pts</span></div></div>
         <div className="stat-card sm"><div className="stat-card-label">{t.guestsPage.stats.avgLtv}</div><div className="stat-card-value sm">EGP 62,400</div><div className="stat-card-meta"><span className="trend up">↑ 8%</span></div></div>
         <div className="stat-card sm"><div className="stat-card-label">{t.guestsPage.stats.vip}</div><div className="stat-card-value sm">84</div><div className="stat-card-meta"><span style={{ color: "var(--muted)" }}>{t.guestsPage.stats.vipNote}</span></div></div>
       </div>
-      <div style={{ background: "#fff", border: "1px solid var(--line)", borderRadius: 14}}>
+      <div className="guest-table-wrap" style={{ background: "#fff", border: "1px solid var(--line)", borderRadius: 14}}>
         <table style={{ width: "100%", borderCollapse: "collapse" }}>
           <thead>
             <tr style={{ background: "var(--ghost)" }}>

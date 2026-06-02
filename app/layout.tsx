@@ -5,6 +5,9 @@ import { ClerkProvider } from "@clerk/nextjs";
 export const metadata: Metadata = {
   title: "Houseiana — Booking Agent Console",
   description: "Houseiana booking agent workspace for managing reservations, guests, and KPIs.",
+  icons: {
+    icon: "/logo.png",
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

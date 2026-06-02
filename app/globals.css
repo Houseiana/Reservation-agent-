@@ -35,10 +35,39 @@ button{font-family:inherit;cursor:pointer;border:none;background:none;color:inhe
 input,select,textarea{font-family:inherit;font-size:14px;color:inherit;outline:none}
 
 /* ============ APP SHELL ============ */
-.app{display:grid;grid-template-columns:270px 1fr;height:100vh}
+.app{display:grid;grid-template-columns:270px 1fr;height:100vh;transition:grid-template-columns .25s ease}
 
 /* ============ SIDEBAR ============ */
-.sidebar{background:var(--charcoal);color:#fff;display:flex;flex-direction:column;padding:18px 0}
+.sidebar{background:var(--charcoal);color:#fff;display:flex;flex-direction:column;padding:18px 0;overflow:hidden}
+/* Desktop-only collapse: shrink the sidebar column to 0 and fade it out.
+   The mobile @media block below overrides .app's columns, so this only
+   takes effect on the desktop (inline) layout. */
+.sidebar-collapse-btn{
+  margin-left:auto;flex-shrink:0;background:transparent;border:none;
+  color:rgba(255,255,255,.55);cursor:pointer;width:30px;height:30px;
+  border-radius:7px;display:grid;place-items:center;
+}
+.sidebar-collapse-btn:hover{background:rgba(255,255,255,.1);color:#fff}
+@media(min-width:769px){
+  .app.sidebar-collapsed{grid-template-columns:0 1fr}
+  .app.sidebar-collapsed .sidebar{opacity:0;pointer-events:none}
+  /* Reserve a left gutter for the floating re-open button so it never sits
+     on top of the topbar search / page content. Button ends at ~52px, so
+     this leaves a comfortable gap before the content starts. */
+  .app.sidebar-collapsed .main{padding-left:65px}
+  .desktop-sidebar-reopen{
+    display:none;position:fixed;top:14px;left:12px;z-index:35;
+    width:40px;height:40px;border-radius:50%;
+    background:var(--charcoal);color:#fff;border:none;cursor:pointer;
+    align-items:center;justify-content:center;box-shadow:var(--shadow-md);
+  }
+  .app.sidebar-collapsed .desktop-sidebar-reopen{display:inline-flex}
+}
+@media(max-width:768px){
+  /* Sidebar collapse is a desktop affordance; never show its buttons on mobile. */
+  .sidebar-collapse-btn{display:none}
+  .desktop-sidebar-reopen{display:none!important}
+}
 .brand{display:flex;align-items:center;gap:10px;padding:0 20px 18px;border-bottom:1px solid rgba(255,255,255,.08)}
 .brand-mark{
   width:34px;height:34px;border-radius:9px;background:var(--yellow);
@@ -46,6 +75,8 @@ input,select,textarea{font-family:inherit;font-size:14px;color:inherit;outline:n
 }
 .brand-name{font-weight:600;font-size:15px}
 .brand-sub{font-size:11px;color:rgba(255,255,255,.55);margin-top:2px}
+.brand-logo-wrap{display:flex;flex-direction:column;gap:2px;min-width:0}
+.brand-logo{height:28px;width:auto;max-width:100%;object-fit:contain;display:block}
 
 .agent-card{
   margin:14px;padding:11px;background:rgba(255,255,255,.04);
@@ -53,10 +84,10 @@ input,select,textarea{font-family:inherit;font-size:14px;color:inherit;outline:n
   display:flex;align-items:center;gap:10px;
 }
 .agent-avatar{
-  width:34px;height:34px;border-radius:50%;
-  background:linear-gradient(135deg,var(--yellow),var(--yellow-deep));
-  color:var(--charcoal);font-weight:600;font-size:12.5px;
-  display:grid;place-items:center;
+  width:34px;height:34px;border-radius:50%;flex-shrink:0;
+  /* Dark disc so the yellow+white "H" logo stays legible. */
+  background:var(--charcoal);border:1px solid rgba(255,255,255,.08);
+  object-fit:contain;padding:5px;
 }
 .agent-info{flex:1;min-width:0}
 .agent-name{font-size:13px;font-weight:500;color:#fff}
@@ -75,7 +106,7 @@ input,select,textarea{font-family:inherit;font-size:14px;color:inherit;outline:n
 .nav-icon{width:18px;height:18px;flex-shrink:0}
 .nav-badge{margin-left:auto;background:rgba(255,255,255,.1);color:#fff;font-size:11px;padding:1px 7px;border-radius:9px;font-weight:500}
 .nav-item.active .nav-badge{background:var(--charcoal);color:var(--yellow)}
-.sidebar-foot{padding:14px 16px;border-top:1px solid rgba(255,255,255,.08);font-size:11px;color:rgba(255,255,255,.4)}
+.sidebar-foot{padding:10px;border-top:1px solid rgba(255,255,255,.08);font-size:11px;color:rgba(255,255,255,.4);text-align:center;flex-shrink:0}
 
 /* ============ MAIN ============ */
 .main{display:flex;flex-direction:column;overflow:hidden}
@@ -86,7 +117,7 @@ input,select,textarea{font-family:inherit;font-size:14px;color:inherit;outline:n
   padding:14px 22px;display:flex;align-items:center;gap:14px;
 }
 .search-pill{
-  flex:1;max-width:780px;display:flex;align-items:center;
+  flex:1;max-width:780px;display:flex;align-items:center;position:relative;
   background:#fff;border:1px solid var(--line);border-radius:50px;
   transition:box-shadow .2s, border-color .2s;
 }
@@ -115,6 +146,11 @@ input,select,textarea{font-family:inherit;font-size:14px;color:inherit;outline:n
   transition:background .15s;flex-shrink:0;
 }
 .search-go:hover{background:var(--yellow-deep)}
+.search-go-label{display:none}
+/* Compact mobile search trigger — hidden on desktop, shown via the mobile block. */
+.mobile-search-summary{display:none}
+.mobile-search-backdrop{display:none}
+.topbar-logo{display:none}
 
 .topbar-right{margin-left:auto;display:flex;gap:8px;align-items:center}
 .icon-btn{
@@ -840,8 +876,9 @@ button:disabled .spinner-sm{opacity:.85}
 
 .bk-guest{display:flex;align-items:center;gap:10px}
 .bk-guest-info{min-width:0}
-.bk-guest-name{font-size:13px;font-weight:500;line-height:1.25}
-.bk-guest-id{font-size:11px;color:var(--muted);margin-top:1px;font-family:-apple-system, monospace}
+.bk-guest-name{font-size:13px;font-weight:500;line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:200px}
+/* Clerk user ids can be very long — clip so they don't blow out the column. */
+.bk-guest-id{font-size:11px;color:var(--muted);margin-top:1px;font-family:-apple-system, monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:200px}
 .bk-tier{
   display:inline-block;font-size:10px;padding:1px 7px;border-radius:50px;
   font-weight:600;margin-top:3px;text-transform:uppercase;letter-spacing:.4px;
@@ -1678,8 +1715,72 @@ body.rtl .inbox-panel.show{transform:translateX(0)}
   .filters.open{transform:translateX(0)}
   .mobile-toggle{display:inline-flex}
   .mobile-backdrop{display:block}
-  /* Push topbar content right so it doesn't sit under the hamburger */
-  .topbar{padding-left:64px}
+  /* Mobile topbar = two rows: a top row holding the fixed menu button (left),
+     the brand logo (centre) and the fixed filter button (right); and the
+     search bar on the row below. The menu/filter buttons are position:fixed
+     (rendered by the page), so we just reserve the top row with padding and
+     centre the logo over it. */
+  .topbar{position:relative;padding:62px 14px 12px;gap:0}
+  .topbar-logo{
+    display:block;position:absolute;top:13px;left:50%;transform:translateX(-50%);
+    height:32px;width:auto;z-index:36;
+  }
+  .mobile-search-summary{
+    display:flex;align-items:center;gap:8px;flex:1;min-width:0;
+    background:#fff;border:1px solid var(--line);border-radius:50px;
+    padding:10px 16px;cursor:pointer;font-family:inherit;text-align:start;
+    color:var(--text);font-size:13px;font-weight:500;
+  }
+  .mobile-search-summary svg{color:var(--charcoal);flex-shrink:0}
+  .mss-text{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  /* The full pill is hidden until opened, then shown as a stacked top sheet. */
+  .topbar .search-pill{display:none}
+  .topbar-right{display:none}
+  .mobile-search-backdrop{display:block;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:54}
+  .topbar .search-pill.mobile-open{
+    display:flex;flex-direction:column;align-items:stretch;
+    position:fixed;top:12px;left:12px;right:12px;max-width:none;z-index:55;
+    background:#fff;border:1px solid var(--line);border-radius:16px;
+    box-shadow:var(--shadow-lg);padding:8px;
+  }
+  .search-pill.mobile-open .search-field,
+  .search-pill.mobile-open .search-field:first-of-type,
+  .search-pill.mobile-open .search-field:last-of-type{
+    flex:none;border-right:none;border-bottom:1px solid var(--line);
+    border-radius:0;padding:12px 14px;
+  }
+  .search-pill.mobile-open .search-field:last-of-type{border-bottom:none}
+  .search-pill.mobile-open .search-go{
+    width:100%;height:auto;border-radius:10px;padding:13px;margin:6px 0 0;gap:8px;
+    display:flex;align-items:center;justify-content:center;
+  }
+  .search-pill.mobile-open .search-go-label{display:inline;font-weight:600;font-size:14px}
+  /* Property-detail footer: keep the price + CTA on one row without
+     overflowing on narrow screens — tighten padding, let the price block
+     shrink, and stop the button from wrapping or being squeezed. */
+  .drawer-foot{padding:12px 16px;gap:10px}
+  .drawer-foot-price{flex:1;min-width:0}
+  .drawer-foot-price b{font-size:16px}
+  .drawer-foot .btn-lg{padding:11px 16px;font-size:13px;white-space:nowrap;flex-shrink:0}
+  /* Bookings table: instead of clipping/overflowing the page, scroll the
+     table horizontally inside its rounded card while keeping each column a
+     sensible width so rows stay aligned. */
+  .bk-table{overflow-x:auto}
+  .bk-table table{min-width:760px}
+  /* Pages without a topbar (Bookings / Guests / KPIs) render their heading at
+     the very top-left, where the fixed hamburger sits. Indent only the title
+     block (not the whole header) so the title sits beside the button while any
+     action row underneath can still use the full width. */
+  .page:not(#page-search) > div:first-child > div:first-child{padding-left:44px}
+  /* Guests page: 4 stat cards are too cramped on a phone — drop to 2 columns,
+     and let the guest table scroll horizontally like the bookings table. */
+  .guest-stats{grid-template-columns:repeat(2,1fr)!important}
+  .guest-table-wrap{overflow-x:auto}
+  .guest-table-wrap table{min-width:680px}
+  /* Search + Add row spans the full width on mobile. */
+  .guest-actions{width:100%}
+  .guest-search-box{flex:1;min-width:0}
+  .guest-search-box .input{width:100%!important}
 }
 @media(max-width:1300px){
   #page-kpis > div:nth-of-type(2){grid-template-columns:repeat(3,1fr)!important}
