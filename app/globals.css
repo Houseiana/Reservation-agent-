@@ -99,7 +99,7 @@ input,select,textarea{font-family:inherit;font-size:14px;color:inherit;outline:n
 .nav-item{
   display:flex;align-items:center;gap:11px;padding:9px 10px;border-radius:8px;
   color:rgba(255,255,255,.75);font-size:13.5px;cursor:pointer;transition:all .15s;
-  margin-bottom:2px;width:100%;text-align:left;
+  margin-bottom:2px;width:100%;text-align:left;text-decoration:none;
 }
 .nav-item:hover{background:rgba(255,255,255,.06);color:#fff}
 .nav-item.active{background:var(--yellow);color:var(--charcoal);font-weight:500}

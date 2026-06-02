@@ -1,21 +1,19 @@
 "use client";
 
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { Icon } from "@/components/Icons";
 import { DICT } from "@/i18n";
-import { type PageKey } from "../_lib";
 import { SignedInAgentCard } from "./SignedInAgentCard";
 
 export function Sidebar({
-  page,
-  setPage,
   simulateCall,
   bookingsCount,
   open,
   onCollapse,
+  onNavigate,
   t,
 }: {
-  page: PageKey;
-  setPage: (p: PageKey) => void;
   simulateCall: () => void;
   /** Total bookings from the list API. Undefined until first fetch. */
   bookingsCount: number | undefined;
@@ -23,8 +21,14 @@ export function Sidebar({
   open: boolean;
   /** Desktop-only — collapse the sidebar to widen the workspace. */
   onCollapse: () => void;
+  /** Called after a nav link is followed (closes the mobile drawer). */
+  onNavigate: () => void;
   t: typeof DICT["en"];
 }) {
+  const pathname = usePathname();
+  const isSearch = pathname === "/dashboard";
+  const isBookings = pathname.startsWith("/dashboard/bookings");
+  const isGuests = pathname.startsWith("/dashboard/guests");
   return (
     <aside className={`sidebar ${open ? "open" : ""}`}>
       <div className="brand">
@@ -66,25 +70,19 @@ export function Sidebar({
       </div>
       <nav className="nav">
         <div className="nav-section">{t.nav.workspace}</div>
-        <button className={`nav-item ${page === "search" ? "active" : ""}`} onClick={() => setPage("search")}>
+        <Link href="/dashboard" className={`nav-item ${isSearch ? "active" : ""}`} onClick={onNavigate}>
           <Icon.Search className="nav-icon" />
           {t.nav.search}
-        </button>
-        <button className={`nav-item ${page === "bookings" ? "active" : ""}`} onClick={() => setPage("bookings")}>
+        </Link>
+        <Link href="/dashboard/bookings" className={`nav-item ${isBookings ? "active" : ""}`} onClick={onNavigate}>
           <Icon.Calendar className="nav-icon" />
           {t.nav.bookings}
           {bookingsCount !== undefined && <span className="nav-badge">{bookingsCount}</span>}
-        </button>
-        <button className={`nav-item ${page === "guests" ? "active" : ""}`} onClick={() => setPage("guests")}>
+        </Link>
+        <Link href="/dashboard/guests" className={`nav-item ${isGuests ? "active" : ""}`} onClick={onNavigate}>
           <Icon.Users className="nav-icon" />
           {t.nav.guests}
-        </button>
-        {/* Temporarily hidden — KPIs page WIP
-        <button className={`nav-item ${page === "kpis" ? "active" : ""}`} onClick={() => setPage("kpis")}>
-          <Icon.Chart className="nav-icon" />
-          {t.nav.kpis}
-        </button>
-        */}
+        </Link>
       </nav>
       <SignedInAgentCard t={t} />
       <div className="sidebar-foot">v2.4.1 · © Houseiana 2026</div>
