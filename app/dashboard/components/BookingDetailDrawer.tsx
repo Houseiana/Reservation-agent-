@@ -2,9 +2,11 @@
 
 import { useState, useEffect } from "react";
 import type React from "react";
+import { useUser } from "@clerk/nextjs";
 import { Icon } from "@/components/Icons";
 import { TODAY_STR, type Booking } from "@/data";
 import { DICT, type Lang } from "@/i18n";
+import { cancelBookingByAdmin, editBooking, getBookingDetails } from "@/lib/api";
 import { tierOf, urgencyOf, freeCancelDeadline, pShortName, pLoc, formatDate, waLink, cleanPhone, propertyUrl, fmtTimeLeft } from "../_lib";
 
 export // derive "free cancel until" date from policy text
@@ -21,10 +23,34 @@ function BookingDetailDrawer({
 }) {
   const tBD = t.bookingDetail;
   const tBP = t.bookingsPage;
+  const { user } = useUser();
+  const adminId = user?.id ?? "";
   const p = booking.property;
   const g = booking.guest;
   const tier = tierOf(g);
   const urgency = urgencyOf(booking, TODAY_STR);
+
+  // Fetch the full booking detail when the drawer opens (or the booking
+  // changes) and merge it into the list so the drawer shows accurate
+  // property / guest / payment info. Local-only fields are preserved.
+  useEffect(() => {
+    const id = booking.id;
+    if (!id) return;
+    const ctrl = new AbortController();
+    getBookingDetails(id, ctrl.signal)
+      .then((detailed) => {
+        setBookings((prev) =>
+          prev.map((b) =>
+            b.ref === booking.ref
+              ? { ...detailed, notes: b.notes, holdUntil: b.holdUntil, refundAmount: b.refundAmount, refundStatus: b.refundStatus }
+              : b
+          )
+        );
+      })
+      .catch((err: Error) => { if (err.name !== "AbortError") { /* keep list data */ } });
+    return () => ctrl.abort();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [booking.id]);
 
   // hold info
   const holdActive = booking.status === "pending" && !!booking.holdUntil && new Date(booking.holdUntil).getTime() > now;
@@ -81,22 +107,32 @@ function BookingDetailDrawer({
 
   function shortName() { return pShortName(p, lang); }
 
-  function saveEdits() {
-    setBookings((prev) =>
-      prev.map((b) => {
-        if (b.ref !== booking.ref) return b;
-        const newNights = Math.max(1, Math.round((new Date(edit.checkout).getTime() - new Date(edit.checkin).getTime()) / 86400000));
-        return {
-          ...b,
-          checkin: edit.checkin,
-          checkout: edit.checkout,
-          nights: newNights,
-          guest: { ...b.guest, first: edit.first.trim() || b.guest.first, last: edit.last.trim() || b.guest.last },
-        };
-      })
-    );
-    setEditMode(false);
-    toast(tBD.edit.savedToast);
+  async function saveEdits() {
+    try {
+      await editBooking({
+        bookingId: booking.id ?? booking.ref,
+        adminId,
+        checkIn: new Date(edit.checkin).toISOString(),
+        checkOut: new Date(edit.checkout).toISOString(),
+      });
+      setBookings((prev) =>
+        prev.map((b) => {
+          if (b.ref !== booking.ref) return b;
+          const newNights = Math.max(1, Math.round((new Date(edit.checkout).getTime() - new Date(edit.checkin).getTime()) / 86400000));
+          return {
+            ...b,
+            checkin: edit.checkin,
+            checkout: edit.checkout,
+            nights: newNights,
+            guest: { ...b.guest, first: edit.first.trim() || b.guest.first, last: edit.last.trim() || b.guest.last },
+          };
+        })
+      );
+      setEditMode(false);
+      toast(tBD.edit.savedToast);
+    } catch (e) {
+      toast((e as Error).message || "Failed to save changes");
+    }
   }
 
   function addNote() {
@@ -112,28 +148,34 @@ function BookingDetailDrawer({
     toast(tBD.notes.addedToast);
   }
 
-  function confirmCancel() {
-    // mark booking as cancelled. If a refund is owed, auto-send the refund
-    // request to the Accounts team in the same step (refundStatus = "requested").
+  async function confirmCancel() {
+    // Cancel on the server, then mark the booking cancelled locally. If a
+    // refund is owed, auto-send the refund request to Accounts in the same
+    // step (refundStatus = "requested").
     const willRefund = refundIfCancelled > 0;
-    setBookings((prev) =>
-      prev.map((b) =>
-        b.ref === booking.ref
-          ? {
-              ...b,
-              status: "cancelled" as const,
-              refundAmount: refundIfCancelled,
-              refundStatus: willRefund ? ("requested" as const) : ("none" as const),
-            }
-          : b
-      )
-    );
-    setCancelDialog(false);
-    toast(
-      willRefund
-        ? tBD.cancelDialog.cancelledWithRefundToast(`${p.currency} ${refundIfCancelled.toLocaleString()}`)
-        : tBD.cancelDialog.cancelledToast
-    );
+    try {
+      await cancelBookingByAdmin({ bookingId: booking.id ?? booking.ref, adminId });
+      setBookings((prev) =>
+        prev.map((b) =>
+          b.ref === booking.ref
+            ? {
+                ...b,
+                status: "cancelled" as const,
+                refundAmount: refundIfCancelled,
+                refundStatus: willRefund ? ("requested" as const) : ("none" as const),
+              }
+            : b
+        )
+      );
+      setCancelDialog(false);
+      toast(
+        willRefund
+          ? tBD.cancelDialog.cancelledWithRefundToast(`${p.currency} ${refundIfCancelled.toLocaleString()}`)
+          : tBD.cancelDialog.cancelledToast
+      );
+    } catch (e) {
+      toast((e as Error).message || "Failed to cancel booking");
+    }
   }
 
   // share messages — reuse existing templates

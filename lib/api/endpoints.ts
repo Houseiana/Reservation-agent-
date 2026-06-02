@@ -29,8 +29,14 @@ export const ENDPOINTS = {
   bookings: {
     list: "/api/reservation-agent/bookings",
     detail: (ref: string) => `/api/reservation-agent/bookings/${ref}`,
+    /** Rich booking detail by id: GET /api/reservation-agent/booking/{id}. */
+    detailById: (id: string) => `/api/reservation-agent/booking/${id}`,
     create: "/api/reservation-agent/bookings",
     confirm: "/api/reservation-agent/booking/confirm",
+    /** Cancel by admin: POST { bookingId, adminId }. */
+    cancelByAdmin: "/api/reservation-agent/booking/cancel",
+    /** Edit stay dates: POST { bookingId, adminId, checkIn, checkOut }. */
+    edit: "/api/reservation-agent/booking/edit",
     update: (ref: string) => `/api/reservation-agent/bookings/${ref}`,
     cancel: (ref: string) => `/api/reservation-agent/bookings/${ref}/cancel`,
     refund: (ref: string) => `/api/reservation-agent/bookings/${ref}/refund`,

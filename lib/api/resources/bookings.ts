@@ -164,6 +164,35 @@ export async function updateBookingNotes(ref: string, notes: string): Promise<Bo
   return mapBooking(raw);
 }
 
+export interface AdminCancelInput {
+  bookingId: string;
+  adminId: string;
+}
+
+/** Cancel a booking via POST /api/reservation-agent/booking/cancel. */
+export async function cancelBookingByAdmin(input: AdminCancelInput): Promise<void> {
+  await api.post<unknown>(ENDPOINTS.bookings.cancelByAdmin, input as unknown as Record<string, unknown>);
+}
+
+export interface BookingEditInput {
+  bookingId: string;
+  adminId: string;
+  /** ISO 8601 datetimes (UTC). */
+  checkIn: string;
+  checkOut: string;
+}
+
+/** Edit a booking's stay dates via POST /api/reservation-agent/booking/edit. */
+export async function editBooking(input: BookingEditInput): Promise<void> {
+  await api.post<unknown>(ENDPOINTS.bookings.edit, input as unknown as Record<string, unknown>);
+}
+
+/** Fetch a single booking's full detail via GET /api/reservation-agent/booking/{id}. */
+export async function getBookingDetails(id: string, signal?: AbortSignal): Promise<Booking> {
+  const raw = await api.get<unknown>(ENDPOINTS.bookings.detailById(id), { signal });
+  return mapBookingDetail(unwrapBookingEnvelope(raw));
+}
+
 /* ------------------------------------------------------------------ */
 /* Mappers                                                             */
 /* ------------------------------------------------------------------ */
@@ -289,6 +318,116 @@ function mapBooking(raw: unknown): Booking {
     status: mapStatus(str("status")),
     channel: "wa",
     paymentStatus: "paid",
+    refundAmount: 0,
+    refundStatus: "none",
+    holdUntil: null,
+  };
+}
+
+/**
+ * Map the rich GET /booking/{id} response (nested stay/guest/property/
+ * owner/payment/cancellation) into the local Booking shape so the booking
+ * detail drawer can show accurate property, guest and payment info.
+ */
+function mapBookingDetail(raw: unknown): Booking {
+  const r = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+  const obj = (v: unknown) => (v && typeof v === "object" ? (v as Record<string, unknown>) : {});
+  const str = (o: Record<string, unknown>, k: string, fb = "") => (typeof o[k] === "string" ? (o[k] as string) : fb);
+  const num = (o: Record<string, unknown>, k: string, fb = 0) => (typeof o[k] === "number" ? (o[k] as number) : fb);
+
+  const stay = obj(r.stay);
+  const guestO = obj(r.guest);
+  const propO = obj(r.property);
+  const ownerO = obj(r.owner);
+  const payO = obj(r.payment);
+  const cancelO = obj(r.cancellation);
+
+  const id = str(r, "id") || undefined;
+  const ref = str(r, "bookingCode") || id || "";
+  const checkin = toDateOnly(str(stay, "checkIn"));
+  const checkout = toDateOnly(str(stay, "checkOut"));
+  const nights = num(stay, "numberOfNights") || daysBetween(checkin, checkout) || 1;
+  const currency = str(propO, "currencyCode") || "EGP";
+
+  const guestName = str(guestO, "fullName") || "—";
+  const [gFirst = "—", ...gRest] = guestName.split(" ");
+  const ltvNum = num(guestO, "lifetimeValue");
+  const guest: Guest = {
+    id: str(guestO, "id"),
+    first: gFirst,
+    last: gRest.join(" "),
+    email: str(guestO, "email"),
+    phone: str(guestO, "phone"),
+    nat: str(guestO, "nationality") || "—",
+    bookings: num(guestO, "completedBookingsCount"),
+    ltv: ltvNum ? `${currency} ${ltvNum.toLocaleString()}` : "—",
+  };
+
+  const subtotal = num(payO, "subtotal");
+  const bookingFeeAbs = num(payO, "bookingFee");
+  const property: Property = {
+    id: str(propO, "id"),
+    name: str(propO, "title") || "—",
+    nameAr: str(propO, "title") || "—",
+    loc: [str(propO, "city"), str(propO, "country")].filter(Boolean).join(", ") || "—",
+    locAr: [str(propO, "city"), str(propO, "country")].filter(Boolean).join(", ") || "—",
+    descAr: "",
+    country: "egypt",
+    type: str(propO, "propertyType") || "apartment",
+    tier: "standard",
+    price: num(propO, "nightlyRate") || num(payO, "nightlyRate"),
+    currency,
+    bedrooms: num(propO, "bedrooms"),
+    bathrooms: num(propO, "bathrooms"),
+    beds: 0,
+    capacity: num(stay, "guests"),
+    area: num(propO, "sizeOfProperty"),
+    rating: 0,
+    reviews: 0,
+    instantBook: false,
+    superhost: false,
+    verified: false,
+    freeCancel: true,
+    desc: "",
+    rooms: [],
+    amenities: {},
+    extras: [],
+    fees: {
+      cleaning: num(payO, "cleaningFee"),
+      utilities: 0,
+      bookingFeePct: subtotal > 0 ? Math.round((bookingFeeAbs / subtotal) * 100) : 0,
+      deposit: 0,
+    },
+    policies: {
+      checkin: "—",
+      checkout: "—",
+      minNights: num(stay, "minNights") || 1,
+      cancel: str(cancelO, "policyType") || "—",
+    },
+    owner: {
+      name: str(ownerO, "fullName") || "—",
+      phone: str(ownerO, "phone"),
+      whatsapp: str(ownerO, "phone"),
+      responseTime: "—",
+    },
+  };
+
+  const totalAmount = num(payO, "total");
+  const payStatus = str(payO, "paymentStatus").toLowerCase();
+  return {
+    id,
+    ref,
+    guest,
+    property,
+    checkin,
+    checkout,
+    nights,
+    total: `${currency} ${totalAmount.toLocaleString()}`,
+    totalAmount,
+    paidAmount: num(payO, "paid"),
+    status: mapStatus(str(r, "status")),
+    channel: "direct",
+    paymentStatus: payStatus === "paid" ? "paid" : payStatus === "partial" ? "partial" : "pending",
     refundAmount: 0,
     refundStatus: "none",
     holdUntil: null,
