@@ -727,7 +727,7 @@ export const DICT: Record<Lang, Dict> = {
       },
       notes: { existingLabel: "Current notes", addLabel: "Add a note", addPlaceholder: "Note about this booking…", saveBtn: "Save note", noneYet: "No notes yet.", addedToast: "Note added" },
       edit: {
-        hint: "Editing booking — change dates or guest name, then Save.",
+        hint: "Editing booking — change the stay dates, then Save.",
         firstNameLabel: "Guest first name", lastNameLabel: "Guest last name",
         checkinLabel: "Check-in", checkoutLabel: "Check-out",
         saveBtn: "Save changes", discardBtn: "Discard changes", savedToast: "Booking updated",
@@ -1114,7 +1114,7 @@ export const DICT: Record<Lang, Dict> = {
       },
       notes: { existingLabel: "الملاحظات الحالية", addLabel: "إضافة ملاحظة", addPlaceholder: "ملاحظة عن هذا الحجز…", saveBtn: "حفظ الملاحظة", noneYet: "لا توجد ملاحظات.", addedToast: "تمت إضافة الملاحظة" },
       edit: {
-        hint: "تعديل الحجز — غيّر التواريخ أو اسم العميل، ثم احفظ.",
+        hint: "تعديل الحجز — غيّر تواريخ الإقامة، ثم احفظ.",
         firstNameLabel: "الاسم الأول للعميل", lastNameLabel: "اسم العائلة",
         checkinLabel: "تاريخ الوصول", checkoutLabel: "تاريخ المغادرة",
         saveBtn: "حفظ التعديلات", discardBtn: "إلغاء التعديل", savedToast: "تم تحديث الحجز",

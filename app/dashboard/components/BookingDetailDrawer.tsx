@@ -78,16 +78,15 @@ function BookingDetailDrawer({
     toast(tBD.hold.releasedToast);
   }
 
-  // edit state
+  // edit state — only the stay dates are editable (the edit API takes
+  // checkIn / checkOut).
   const [editMode, setEditMode] = useState(false);
-  const [edit, setEdit] = useState({
-    first: g.first, last: g.last, checkin: booking.checkin, checkout: booking.checkout,
-  });
+  const [edit, setEdit] = useState({ checkin: booking.checkin, checkout: booking.checkout });
   useEffect(() => {
     // re-sync if user switches booking while drawer was open
-    setEdit({ first: g.first, last: g.last, checkin: booking.checkin, checkout: booking.checkout });
+    setEdit({ checkin: booking.checkin, checkout: booking.checkout });
     setEditMode(false);
-  }, [booking.ref, g.first, g.last, booking.checkin, booking.checkout]);
+  }, [booking.ref, booking.checkin, booking.checkout]);
 
   const [noteDraft, setNoteDraft] = useState("");
   const [cancelDialog, setCancelDialog] = useState(false);
@@ -124,7 +123,6 @@ function BookingDetailDrawer({
             checkin: edit.checkin,
             checkout: edit.checkout,
             nights: newNights,
-            guest: { ...b.guest, first: edit.first.trim() || b.guest.first, last: edit.last.trim() || b.guest.last },
           };
         })
       );
@@ -313,16 +311,6 @@ function BookingDetailDrawer({
                 <div>
                   <label>{tBD.edit.checkoutLabel}</label>
                   <input type="date" value={edit.checkout} onChange={(e) => setEdit((s) => ({ ...s, checkout: e.target.value }))} />
-                </div>
-              </div>
-              <div className="bd-edit-row">
-                <div>
-                  <label>{tBD.edit.firstNameLabel}</label>
-                  <input type="text" value={edit.first} onChange={(e) => setEdit((s) => ({ ...s, first: e.target.value }))} />
-                </div>
-                <div>
-                  <label>{tBD.edit.lastNameLabel}</label>
-                  <input type="text" value={edit.last} onChange={(e) => setEdit((s) => ({ ...s, last: e.target.value }))} />
                 </div>
               </div>
             </>
@@ -538,7 +526,7 @@ function BookingDetailDrawer({
       <div className="bd-footer">
         {editMode ? (
           <>
-            <button className="btn btn-secondary btn-sm" onClick={() => { setEditMode(false); setEdit({ first: g.first, last: g.last, checkin: booking.checkin, checkout: booking.checkout }); }}>
+            <button className="btn btn-secondary btn-sm" onClick={() => { setEditMode(false); setEdit({ checkin: booking.checkin, checkout: booking.checkout }); }}>
               {tBD.edit.discardBtn}
             </button>
             <button className="btn btn-primary btn-sm" onClick={saveEdits}>{tBD.edit.saveBtn}</button>
