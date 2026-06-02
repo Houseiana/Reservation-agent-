@@ -7,18 +7,19 @@ const PAGE = "app/dashboard/page.tsx";
 
 // ----- CONFIG (edit per component) -----
 const startMarker = `/* ============================================================
-   GUEST DETAIL DRAWER
+   BOOKINGS PAGE
 ============================================================ */
 `;
 const endMarker = null; // null = slice to end of file
-const outFile = "app/dashboard/components/GuestDetailDrawer.tsx";
+const outFile = "app/dashboard/components/BookingsPage.tsx";
 const importHeader = `"use client";
 
-import type React from "react";
+import { useState, useMemo } from "react";
 import { Icon } from "@/components/Icons";
-import { TODAY_STR, type Guest, type Booking } from "@/data";
+import { TODAY_STR, type Booking } from "@/data";
 import { DICT, type Lang } from "@/i18n";
-import { tierOf, pShortName, pLoc, formatDate, formatDateShort, waLink, cleanPhone } from "../_lib";
+import { type LookupItem } from "@/lib/api";
+import { urgencyOf, tierOf, statusNameToEnum, pShortName, pLoc, formatDateShort, type BookingFilter } from "../_lib";
 import { CHANNEL_ICON } from "./ChannelIcon";
 
 `;
