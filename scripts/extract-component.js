@@ -7,20 +7,20 @@ const PAGE = "app/dashboard/page.tsx";
 
 // ----- CONFIG (edit per component) -----
 const startMarker = `/* ============================================================
-   BOOKINGS PAGE
+   BOOKING FLOW
 ============================================================ */
 `;
-const endMarker = null; // null = slice to end of file
-const outFile = "app/dashboard/components/BookingsPage.tsx";
+const endMarker = null;
+const outFile = "app/dashboard/components/BookingFlow.tsx";
 const importHeader = `"use client";
 
-import { useState, useMemo } from "react";
+import type React from "react";
 import { Icon } from "@/components/Icons";
-import { TODAY_STR, type Booking } from "@/data";
+import { type Property, type Guest } from "@/data";
 import { DICT, type Lang } from "@/i18n";
-import { type LookupItem } from "@/lib/api";
-import { urgencyOf, tierOf, statusNameToEnum, pShortName, pLoc, formatDateShort, type BookingFilter } from "../_lib";
-import { CHANNEL_ICON } from "./ChannelIcon";
+import { createUser, ApiError, type LookupItem } from "@/lib/api";
+import { useSubmitting } from "@/hooks/useSubmitting";
+import { pLoc, pShortName, formatDate, waLink, type BookingState, type SearchState, type Totals } from "../_lib";
 
 `;
 // ----- END CONFIG -----
