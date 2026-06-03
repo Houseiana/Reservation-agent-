@@ -1480,6 +1480,24 @@ body.rtl .check-row .price-add{margin-left:0;margin-right:auto}
 .guest-tag.repeat{background:var(--green-soft);color:var(--green)}
 .guest-tag.new{background:var(--blue-soft);color:var(--blue)}
 
+/* ===== Add guest dialog ===== */
+.add-guest-overlay{position:fixed;inset:0;background:rgba(29,36,43,.45);z-index:70}
+.add-guest-modal{
+  position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);
+  width:460px;max-width:calc(100vw - 32px);max-height:calc(100vh - 64px);overflow-y:auto;
+  background:#fff;border-radius:16px;z-index:71;box-shadow:var(--shadow-lg);
+}
+.add-guest-head{display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--line)}
+.add-guest-title{font-size:16px;font-weight:600}
+.add-guest-body{padding:18px 20px;display:flex;flex-direction:column;gap:14px}
+.add-guest-row{display:flex;gap:12px}
+.add-guest-row > label,.add-guest-field{display:flex;flex-direction:column;gap:5px;flex:1}
+.add-guest-body label > span{font-size:12px;font-weight:500;color:var(--text-2)}
+.add-guest-body .input{width:100%}
+.add-guest-check{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text-2);cursor:pointer}
+.add-guest-check input{width:16px;height:16px}
+.add-guest-foot{display:flex;justify-content:flex-end;gap:8px;margin-top:4px}
+
 .cat-row{
   display:flex;align-items:center;gap:12px;padding:11px 20px;border-bottom:1px solid var(--line);
 }

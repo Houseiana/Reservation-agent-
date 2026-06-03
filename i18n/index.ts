@@ -271,6 +271,11 @@ interface Dict {
     headers: { guest: string; contact: string; nationality: string; bookings: string; ltv: string; lastStay: string; tags: string };
     tags: { repeat: string; vip: string; new: string };
     lastStays: Record<string, string>;
+    addGuestForm: {
+      title: string; firstName: string; lastName: string; email: string;
+      countryCode: string; phone: string; createByPhone: string;
+      cancel: string; create: string; creating: string; createdToast: string;
+    };
   };
   bookingDetail: {
     title: string;
@@ -680,6 +685,11 @@ export const DICT: Record<Lang, Dict> = {
       headers: { guest: "Guest", contact: "Contact", nationality: "Nationality", bookings: "Bookings", ltv: "Lifetime value", lastStay: "Last stay", tags: "Tags" },
       tags: { repeat: "Repeat", vip: "VIP", new: "New" },
       lastStays: { "G-1042": "2 weeks ago", "G-2018": "3 days ago", "G-0892": "last month", "G-1577": "5 days ago", "G-2204": "2 months ago", "G-0331": "today" },
+      addGuestForm: {
+        title: "Add guest", firstName: "First name", lastName: "Last name", email: "Email",
+        countryCode: "Country code", phone: "Phone", createByPhone: "Create by phone",
+        cancel: "Cancel", create: "Create guest", creating: "Creating…", createdToast: "Guest added",
+      },
     },
     bookingDetail: {
       title: "Booking details",
@@ -1067,6 +1077,11 @@ export const DICT: Record<Lang, Dict> = {
       headers: { guest: "العميل", contact: "وسيلة التواصل", nationality: "الجنسية", bookings: "الحجوزات", ltv: "قيمة العميل", lastStay: "آخر إقامة", tags: "رسوم" },
       tags: { repeat: "متكرر", vip: "VIP", new: "جديد" },
       lastStays: { "G-1042": "منذ أسبوعين", "G-2018": "منذ 3 أيام", "G-0892": "الشهر الماضي", "G-1577": "منذ 5 أيام", "G-2204": "منذ شهرين", "G-0331": "اليوم" },
+      addGuestForm: {
+        title: "إضافة عميل", firstName: "الاسم الأول", lastName: "اسم العائلة", email: "البريد الإلكتروني",
+        countryCode: "كود الدولة", phone: "رقم التليفون", createByPhone: "إنشاء بالهاتف",
+        cancel: "إلغاء", create: "إضافة العميل", creating: "جارٍ الإضافة…", createdToast: "تمت إضافة العميل",
+      },
     },
     bookingDetail: {
       title: "تفاصيل الحجز",

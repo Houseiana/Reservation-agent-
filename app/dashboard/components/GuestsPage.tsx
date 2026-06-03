@@ -1,21 +1,56 @@
 "use client";
 
+import { useState } from "react";
 import { Icon } from "@/components/Icons";
 import { type Guest } from "@/data";
 import { DICT } from "@/i18n";
+import { createUser } from "@/lib/api";
 
 export function GuestsPage({
   t,
   guests,
   loading,
   onOpenGuest,
+  toast,
+  onCreated,
 }: {
   t: typeof DICT["en"];
   guests: Guest[];
   loading: boolean;
   onOpenGuest: (id: string) => void;
+  toast: (msg: string) => void;
+  /** Reload the guest list after a new guest is created. */
+  onCreated: () => void;
 }) {
   const headers = [t.guestsPage.headers.guest, t.guestsPage.headers.contact, t.guestsPage.headers.nationality, t.guestsPage.headers.bookings, t.guestsPage.headers.ltv, t.guestsPage.headers.lastStay];
+  const tAGF = t.guestsPage.addGuestForm;
+
+  const [addOpen, setAddOpen] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [form, setForm] = useState({ firstName: "", lastName: "", email: "", countryCode: "20", phone: "", createByPhone: true });
+
+  async function submitAdd() {
+    if (submitting) return;
+    setSubmitting(true);
+    try {
+      await createUser({
+        createByPhone: form.createByPhone,
+        email: form.email.trim(),
+        firstName: form.firstName.trim(),
+        lastName: form.lastName.trim(),
+        countryCode: form.countryCode.trim(),
+        phone: form.phone.trim(),
+      });
+      toast(tAGF.createdToast);
+      setAddOpen(false);
+      setForm({ firstName: "", lastName: "", email: "", countryCode: "20", phone: "", createByPhone: true });
+      onCreated();
+    } catch (e) {
+      toast((e as Error).message || "Failed to add guest");
+    } finally {
+      setSubmitting(false);
+    }
+  }
   return (
     <>
       <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", marginBottom: 20, flexWrap: "wrap", gap: 10 }}>
@@ -28,7 +63,7 @@ export function GuestsPage({
             <Icon.Search size={14} style={{ position: "absolute", left: 11, top: "50%", transform: "translateY(-50%)", color: "var(--muted)" }} />
             <input type="text" className="input" placeholder={t.guestsPage.searchPlaceholder} style={{ paddingLeft: 34, width: 240 }} />
           </div>
-          <button className="btn btn-primary btn-sm">{t.guestsPage.addGuest}</button>
+          <button className="btn btn-primary btn-sm" onClick={() => setAddOpen(true)}>{t.guestsPage.addGuest}</button>
         </div>
       </div>
       <div className="guest-stats" style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 14, marginBottom: 20 }}>
@@ -87,6 +122,56 @@ export function GuestsPage({
           </tbody>
         </table>
       </div>
+
+      {/* ADD GUEST DIALOG */}
+      {addOpen && (
+        <>
+          <div className="add-guest-overlay" onClick={() => !submitting && setAddOpen(false)} />
+          <div className="add-guest-modal" role="dialog" aria-modal="true">
+            <div className="add-guest-head">
+              <div className="add-guest-title">{tAGF.title}</div>
+              <button className="drawer-close" onClick={() => setAddOpen(false)} disabled={submitting}><Icon.X /></button>
+            </div>
+            <form
+              className="add-guest-body"
+              onSubmit={(e) => { e.preventDefault(); submitAdd(); }}
+            >
+              <div className="add-guest-row">
+                <label>
+                  <span>{tAGF.firstName}</span>
+                  <input className="input" type="text" value={form.firstName} onChange={(e) => setForm((s) => ({ ...s, firstName: e.target.value }))} />
+                </label>
+                <label>
+                  <span>{tAGF.lastName}</span>
+                  <input className="input" type="text" value={form.lastName} onChange={(e) => setForm((s) => ({ ...s, lastName: e.target.value }))} />
+                </label>
+              </div>
+              <label className="add-guest-field">
+                <span>{tAGF.email}</span>
+                <input className="input" type="email" value={form.email} onChange={(e) => setForm((s) => ({ ...s, email: e.target.value }))} />
+              </label>
+              <div className="add-guest-row">
+                <label style={{ maxWidth: 110 }}>
+                  <span>{tAGF.countryCode}</span>
+                  <input className="input" type="text" inputMode="numeric" value={form.countryCode} onChange={(e) => setForm((s) => ({ ...s, countryCode: e.target.value }))} />
+                </label>
+                <label style={{ flex: 1 }}>
+                  <span>{tAGF.phone}</span>
+                  <input className="input" type="tel" value={form.phone} onChange={(e) => setForm((s) => ({ ...s, phone: e.target.value }))} />
+                </label>
+              </div>
+              <label className="add-guest-check">
+                <input type="checkbox" checked={form.createByPhone} onChange={(e) => setForm((s) => ({ ...s, createByPhone: e.target.checked }))} />
+                <span>{tAGF.createByPhone}</span>
+              </label>
+              <div className="add-guest-foot">
+                <button type="button" className="btn btn-secondary btn-sm" onClick={() => setAddOpen(false)} disabled={submitting}>{tAGF.cancel}</button>
+                <button type="submit" className="btn btn-primary btn-sm" disabled={submitting}>{submitting ? tAGF.creating : tAGF.create}</button>
+              </div>
+            </form>
+          </div>
+        </>
+      )}
     </>
   );
 }

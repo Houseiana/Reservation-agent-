@@ -37,6 +37,8 @@ export default function GuestsRoute() {
             guests={guests}
             loading={guestsResult.loading}
             onOpenGuest={(id) => setSelectedGuestId(id)}
+            toast={toast}
+            onCreated={guestsResult.refetch}
           />
         </section>
       </div>
