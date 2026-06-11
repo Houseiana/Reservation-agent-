@@ -20,6 +20,8 @@ export interface PropertySearchParams {
   checkin?: string;       // YYYY-MM-DD
   checkout?: string;      // YYYY-MM-DD
   location?: string;
+  /** Free-text search matched against the property title/name. */
+  search?: string;
   instantBook?: boolean;
   sortBy?: number;
   page?: number;
@@ -83,6 +85,7 @@ function flattenQuery(p: PropertySearchParams) {
     checkin: p.checkin,
     checkout: p.checkout,
     location: p.location,
+    search: p.search,
     instantBook: p.instantBook,
     sortBy: p.sortBy,
     page: p.page,
