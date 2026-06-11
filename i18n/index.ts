@@ -82,6 +82,7 @@ interface Dict {
     all: string;
     staysIn: (x: string) => string;
     meta: (n: number, dates: string, guests: number) => string;
+    searchByTitle: string;
     sortRecommended: string;
     sortPriceAsc: string;
     sortPriceDesc: string;
@@ -514,6 +515,7 @@ export const DICT: Record<Lang, Dict> = {
       all: "All properties",
       staysIn: (x) => `Stays in ${x}`,
       meta: (n, dates, g) => `${n} ${n === 1 ? "property" : "properties"} · ${dates} · ${g} ${g === 1 ? "guest" : "guests"}`,
+      searchByTitle: "Search by title",
       sortRecommended: "Sort: Recommended",
       sortPriceAsc: "Price: low to high", sortPriceDesc: "Price: high to low",
       sortRating: "Top rated", sortArea: "Largest area",
@@ -906,6 +908,7 @@ export const DICT: Record<Lang, Dict> = {
       all: "كل العقارات",
       staysIn: (x) => `إقامة في ${x}`,
       meta: (n, dates, g) => `${n} عقار · ${dates} · ${g} ضيف`,
+      searchByTitle: "ابحث بالعنوان",
       sortRecommended: "ترتيب: مقترح",
       sortPriceAsc: "السعر: من الأقل للأعلى", sortPriceDesc: "السعر: من الأعلى للأقل",
       sortRating: "الأعلى تقييماً", sortArea: "الأكبر مساحة",

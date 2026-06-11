@@ -59,6 +59,15 @@ export default function Page() {
     extras: new Set(),
   });
   const [sort, setSort] = useState<number | null>(null);
+  // Free-text "search by title" box in the results header. The raw input
+  // updates on every keystroke; titleQuery is debounced and is what actually
+  // feeds the property-search `search` param.
+  const [titleInput, setTitleInput] = useState("");
+  const [titleQuery, setTitleQuery] = useState("");
+  useEffect(() => {
+    const id = setTimeout(() => setTitleQuery(titleInput.trim()), 300);
+    return () => clearTimeout(id);
+  }, [titleInput]);
   const [favs, setFavs] = useState<Set<string>>(new Set());
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set(["booking"]));
   const [whereDropdown, setWhereDropdown] = useState(false);
@@ -162,6 +171,11 @@ export default function Page() {
 
   const [searchPage, setSearchPage] = useState(1);
   const PAGE_SIZE = 20;
+  // The backend's property-search endpoint ignores any text query param, so
+  // title search is done on the client. When a title query is active we pull
+  // the full (server-filtered) result set in one page and filter/paginate it
+  // locally. The dataset is small (~100 properties) so this is cheap.
+  const TITLE_FETCH_LIMIT = 300;
   const resultsTopRef = useRef<HTMLDivElement | null>(null);
   function goToPage(p: number) {
     setSearchPage(p);
@@ -173,6 +187,7 @@ export default function Page() {
     setSearchPage(1);
   }, [
     search.where,
+    titleQuery,
     search.checkin,
     search.checkout,
     search.guests,
@@ -208,13 +223,14 @@ export default function Page() {
           amenities: amenityIds,
           instantBook: filters.flags.has("instantBook") || undefined,
           sortBy: sort ?? undefined,
-          page: searchPage,
-          limit: PAGE_SIZE,
+          page: titleQuery ? 1 : searchPage,
+          limit: titleQuery ? TITLE_FETCH_LIMIT : PAGE_SIZE,
         },
         signal,
       ),
     [
       search.where,
+      titleQuery,
       search.checkin,
       search.checkout,
       search.guests,
@@ -233,8 +249,21 @@ export default function Page() {
     ],
   );
 
-  const filtered = searchResult.data?.items ?? [];
-  const totalResults = searchResult.data?.total ?? 0;
+  const rawItems = searchResult.data?.items ?? [];
+  // Client-side title filter (backend ignores text search — see TITLE_FETCH_LIMIT).
+  const titleMatches = useMemo(() => {
+    const needle = titleQuery.toLowerCase();
+    if (!needle) return rawItems;
+    return rawItems.filter(
+      (p) => p.name.toLowerCase().includes(needle) || p.nameAr.toLowerCase().includes(needle),
+    );
+  }, [rawItems, titleQuery]);
+  // In title mode we fetched the full set, so slice it for the current page;
+  // otherwise the server already returned just this page.
+  const filtered = titleQuery
+    ? titleMatches.slice((searchPage - 1) * PAGE_SIZE, searchPage * PAGE_SIZE)
+    : titleMatches;
+  const totalResults = titleQuery ? titleMatches.length : (searchResult.data?.total ?? 0);
   const totalPages = Math.max(1, Math.ceil(totalResults / PAGE_SIZE));
 
   function toggleGroup(name: string) {
@@ -519,6 +548,14 @@ export default function Page() {
                   </div>
                 </div>
                 <div className="results-tools">
+                  <input
+                    type="search"
+                    className="results-search"
+                    placeholder={t.results.searchByTitle}
+                    value={titleInput}
+                    onChange={(e) => setTitleInput(e.target.value)}
+                    aria-label={t.results.searchByTitle}
+                  />
                   <select
                     className="sort-select"
                     value={sort ?? ""}
