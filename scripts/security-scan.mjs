@@ -4,6 +4,13 @@
 // .vscode task on folderOpen, and appended it to tailwind.config.js behind a
 // long run of spaces so it also ran on every `npm run dev` / `build`.
 //
+// The Oct 2026 wave changed disguise: the payload sat in public/fonts/ as
+// fa-brand-400.orc (an extension nothing scanned), a copy went into a root
+// file named `init` (no extension), package.json scripts became
+// `node init && next dev`. Earlier, infected machines had also rewritten
+// .gitignore (no more .env lines, a new config.bat line) and that went out
+// with normal commits as far back as Jan 2026.
+//
 // Runs automatically before `dev`, `dev:next` and `build` (npm pre-scripts),
 // from the git hooks in .githooks/, and in CI (.github/workflows).
 //
@@ -14,8 +21,8 @@
 //
 // Usage: node scripts/security-scan.mjs   (exit code 1 = something found)
 
-import { readdirSync, readFileSync, statSync } from 'node:fs';
-import { basename, extname, join, relative, sep } from 'node:path';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import { basename, dirname, extname, join, relative, sep } from 'node:path';
 
 const ROOT = process.cwd();
 const IN_CI = process.env.GITHUB_ACTIONS === 'true';
@@ -40,6 +47,10 @@ const MAX_FILE_BYTES = 5 * 1024 * 1024;
 // A9-8618 or 9-8618-<suffix>. The version changes between waves, so match
 // the shape, not the value. \x21 is "!", so this file does not match itself.
 const MARKER = /global\s*(\[\s*['"]\x21['"]\s*\]|\.i)\s*=\s*['"][A-Z]?\d+-\d+/;
+// Every wave ends the loader by calling itself with Node's global object and
+// require, so it can load modules from inside a config file. App code never
+// does this. Split with \s* so this file does not match itself.
+const LOADER_CALL = /\}\s*\(\s*global\s*,\s*require\s*\)\s*\)/;
 
 const CODE_EXT = new Set(['.js', '.mjs', '.cjs', '.ts', '.tsx', '.jsx']);
 const BINARY_ASSET_EXT = new Set([
@@ -55,8 +66,58 @@ const BINARY_ASSET_EXT = new Set([
   '.ico',
   '.webp',
 ]);
+// Text formats that are not code. Any other text file (no extension, or one
+// like .orc) is checked for JavaScript hiding inside it.
+const TEXT_DATA_EXT = new Set([
+  '.md',
+  '.mdx',
+  '.txt',
+  '.json',
+  '.css',
+  '.scss',
+  '.sass',
+  '.less',
+  '.html',
+  '.htm',
+  '.svg',
+  '.xml',
+  '.yml',
+  '.yaml',
+  '.toml',
+  '.lock',
+  '.map',
+  '.csv',
+  '.log',
+  '.example',
+  '.sample',
+  '.template',
+  '.php',
+  '.py',
+  '.sh',
+  '.ps1',
+  '.bat',
+  '.cmd',
+  '.sql',
+  '.vue',
+  '.svelte',
+  '.astro',
+  '.hbs',
+  '.handlebars',
+  '.ejs',
+  '.pug',
+  '.twig',
+]);
 const CONFIG_FILE =
   /(\.config\.[cm]?[jt]s|^server\.js|^\.eslintrc.*|^package\.json)$/;
+// Signs of JavaScript. A file needs two of them to count, so a README or a
+// shell script that mentions one in passing does not match.
+const JS_SIGNS = [
+  /\brequire\s*\(\s*['"]/,
+  /\bmodule\.exports\b|\bexports\.[\w$]+\s*=/,
+  /\b(?:const|let|var)\s+[\w$]+\s*=/,
+  /=>/,
+  /\bfunction\s*\(/,
+];
 
 let failed = false;
 
@@ -112,18 +173,66 @@ function looksLikeText(buf) {
   return printable / sample.length > 0.95;
 }
 
+function looksLikeJs(text) {
+  return JS_SIGNS.filter((sign) => sign.test(text)).length >= 2;
+}
+
+// 8. npm scripts that run a file which is not a JS file (`node init`), or
+// run inline code (`node -e`). Checked in every package.json, since
+// monorepo sub-projects were infected too.
+function checkScripts(file, full, text) {
+  let scripts;
+  try {
+    ({ scripts = {} } = JSON.parse(text));
+  } catch {
+    return;
+  }
+  const base = dirname(full);
+  for (const [script, command] of Object.entries(scripts)) {
+    if (typeof command !== 'string') continue;
+    // (?<![\w-]) so `ts-node --compiler-options {...}` is not read as node.
+    if (/(?<![\w-])node\s+(?:-[\w-]+\s+)*(?:-e|--eval|-p|--print)\b/.test(command)) {
+      report(file, `npm script "${script}" runs inline code: ${command}`);
+    }
+    const runs = /(?<![\w-])node\s+(?:-{1,2}[\w-]+(?:=\S+)?\s+)*([^\s&|;'"-][^\s&|;'"]*)/g;
+    for (const [, target] of command.matchAll(runs)) {
+      if (target === '.' || CODE_EXT.has(extname(target).toLowerCase())) {
+        continue;
+      }
+      // `node server` resolves to server.js; anything else is not a script.
+      if (!extname(target) && existsSync(join(base, `${target}.js`))) continue;
+      report(
+        file,
+        `npm script "${script}" runs "${target}", which is not a JS file: ${command}`
+      );
+    }
+  }
+}
+
 for (const full of walk(ROOT)) {
   const file = relative(ROOT, full).split(sep).join('/');
   const name = basename(file);
   const ext = extname(file).toLowerCase();
 
-  if (statSync(full).size > MAX_FILE_BYTES) continue;
-  const buf = readFileSync(full);
+  let buf;
+  try {
+    if (statSync(full).size > MAX_FILE_BYTES) continue;
+    buf = readFileSync(full);
+  } catch (err) {
+    // Antivirus locks or quarantines files it flags, so an unreadable file
+    // is a finding in itself. Keep scanning the rest either way.
+    report(file, `Could not read file (${err.code}), possibly quarantined by antivirus`);
+    continue;
+  }
 
-  // 1. Known marker of this malware family, in any file type.
-  const tag = buf.toString('latin1').match(MARKER);
+  // 1. Known markers of this malware family, in any file type.
+  const latin = buf.toString('latin1');
+  const tag = latin.match(MARKER);
   if (tag) {
     report(file, `Known malware marker found: ${tag[0]}`);
+  }
+  if (LOADER_CALL.test(latin)) {
+    report(file, 'Malware loader found (code that runs itself with global and require)');
   }
 
   // 2. Binary assets that are really text.
@@ -153,12 +262,32 @@ for (const full of walk(ROOT)) {
     }
   }
 
+  // 9. A committed .env file. Locally it is normal and git-ignored, but in a
+  // CI checkout it can only be there because someone committed it.
+  if (IN_CI && /^\.env(\.(?!example$|sample$|template$)[\w.-]+)?$/.test(name)) {
+    report(file, 'Environment file with secrets is committed to the repo');
+  }
+
+  // 10. JavaScript hiding in a file with no extension (`init`) or one that
+  // nothing else checks (`.orc`).
+  const isHiddenJs =
+    !CODE_EXT.has(ext) &&
+    !TEXT_DATA_EXT.has(ext) &&
+    !file.startsWith('.vscode/') &&
+    !name.startsWith('.') &&
+    looksLikeText(buf) &&
+    looksLikeJs(buf.toString('utf8'));
+  if (isHiddenJs) {
+    report(file, 'JavaScript code in a file without a JS extension');
+  }
+
   const isConfig = CONFIG_FILE.test(name);
-  if (!CODE_EXT.has(ext) && !isConfig) continue;
+  const isCode = CODE_EXT.has(ext) || isHiddenJs;
+  if (!isCode && !isConfig) continue;
   const text = buf.toString('utf8');
   const lines = text.split(/\r?\n/);
 
-  if (CODE_EXT.has(ext)) {
+  if (isCode) {
     // 4. Code hidden after a long run of spaces, so it sits off-screen.
     // Needs code BEFORE the spaces too (`};<spaces>payload`), otherwise
     // deeply indented JSX would match.
@@ -172,6 +301,16 @@ for (const full of walk(ROOT)) {
     if (obfuscated && obfuscated.length >= 10) {
       report(file, 'Obfuscated identifiers (_0x...) found');
     }
+    // Newer obfuscator builds use random names instead of _0x, but keep the
+    // string-array rotation loop and hundreds of hex literals.
+    const hexLiterals = text.match(/\b0x[0-9a-f]{2,}\b/gi);
+    if (
+      /while\s*\(\s*!!\[\]\s*\)/.test(text) &&
+      hexLiterals &&
+      hexLiterals.length >= 100
+    ) {
+      report(file, 'Obfuscated code (string-array rotation + hex literals) found');
+    }
   }
 
   // 6. Config files are short and hand-written; one very long line there
@@ -180,6 +319,8 @@ for (const full of walk(ROOT)) {
   if (isConfig && lines.some((line) => line.length > 500)) {
     report(file, 'Config file has a line longer than 500 characters');
   }
+
+  if (name === 'package.json') checkScripts(file, full, text);
 }
 
 // 7. npm lifecycle hooks run on `npm install`. None exist today, so a new one
@@ -198,6 +339,22 @@ try {
   // No package.json or invalid JSON: nothing to check here.
 }
 
+// 11. On infected machines the malware edits .gitignore: it deletes the .env
+// lines so the next commit pushes secrets, and adds config.bat so the file
+// it drops in the project never shows up in `git status`.
+try {
+  const ignore = readFileSync('.gitignore', 'utf8');
+  // Needs a rule that matches `.env` itself; `.env*.local` alone does not.
+  if (!/^\s*\/?(?:\.env\*?|\*\.env)\s*$/m.test(ignore)) {
+    report('.gitignore', '.env files are no longer git-ignored');
+  }
+  if (/^\s*\/?config\.bat\s*$/m.test(ignore)) {
+    report('.gitignore', 'Ignores config.bat, the file the malware drops');
+  }
+} catch {
+  // No .gitignore: nothing to check here.
+}
+
 if (failed) {
   console.error(
     '\nSecurity scan FAILED. Do not run or build this project until the files ' +
@@ -205,4 +362,4 @@ if (failed) {
   );
   process.exit(1);
 }
-console.log('🔐 Security scan passed  ✅');
+console.log('\x1b[32m🔐  Security scan passed  ✅\x1b[0m');
